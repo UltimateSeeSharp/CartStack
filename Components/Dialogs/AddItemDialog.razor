@@ -4,12 +4,19 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudTextField T="string"
-                          @bind-Value="_name"
-                          Label="Was?"
-                          Variant="Variant.Outlined"
-                          Immediate="true"
-                          AutoFocus="true" />
+            <MudAutocomplete T="string"
+                             @bind-Value="_name"
+                             Label="Was?"
+                             Variant="Variant.Outlined"
+                             SearchFunc="SearchNamesAsync"
+                             CoerceText="true"
+                             CoerceValue="true"
+                             ResetValueOnEmptyText="false"
+                             MaxItems="5"
+                             DebounceInterval="120"
+                             ShowProgressIndicator="false"
+                             OpenOnFocus="false"
+                             AutoFocus="true" />
 
             <MudNumericField T="int"
                              @bind-Value="_qty"
@@ -76,4 +83,9 @@
     }
 
     private void Cancel() => Dialog.Cancel();
+
+    private async Task<IEnumerable<string>> SearchNamesAsync(string? prefix, CancellationToken ct)
+    {
+        return await Grocery.GetNameSuggestionsAsync(prefix ?? "", 5, ct);
+    }
 }
