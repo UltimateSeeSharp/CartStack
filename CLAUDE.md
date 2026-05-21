@@ -11,6 +11,14 @@ EF Core migrations apply **automatically at app startup** via `db.Database.Migra
 - Do not put `dotnet ef database update` in README setup steps, Dockerfile, or `fly.toml` release commands. The app applies its own schema.
 - Single-instance deploy (Fly with one machine), so the parallel-startup migration race isn't a concern. Flag this convention if/when we scale out.
 
+## Barcode data sources (for Phase 4.5)
+
+- Free, usable: **Open Food Facts** (`world.openfoodfacts.org/api/v2/product/<ean>.json`). Good for branded goods, weak on Austrian private labels (Hofer "Zurück zum Ursprung", Spar "S-Budget"/"Clever", Baumarkt SKUs).
+- Authoritative but unusable here: GS1 Austria (`gs1.at`) is the registrar of EANs starting with `90`/`91` but bulk access is paid B2B. GEPIR portal returns brand owner only.
+- **Do not** scrape `spar.at` / `hofer.at` / `billa.at` — ToS violation, structures change, fragile.
+- Do not buy commercial barcode-lookup APIs (UPCitemdb, EAN-Search, Barcodelookup) expecting AT private-label coverage — they're US/UK-centric.
+- The real database is the family-local `BarcodeLookup` cache populated by first scans; OFF is a one-time bootstrap per EAN.
+
 ## Configuration
 
 - Public, non-sensitive defaults live in `appsettings.json` (logging, connection string template).

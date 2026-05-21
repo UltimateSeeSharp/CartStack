@@ -71,6 +71,41 @@ A small mobile-first grocery list for the Vinci family (David, Julian, Angelika,
 
 **Gate:** two browser windows, two users → add in A → appears in B within ~1s; mark bought in B → vanishes from A. Commit: `Phase 4: liste page`.
 
+## Phase 4.5 — Barcode scanning (≈4h, optional / post-v1)
+
+**Goal:** scan an EAN with the phone camera, auto-fill the Add dialog with name + likely store. After a few weeks of use, the family-local cache covers ~all recurring items.
+
+**Why this is its own phase, after v1:** Austrian retail coverage from free data sources is uneven — Open Food Facts handles branded goods (Coca-Cola, Manner, Almdudler, Iglo) but is weak on Hofer "Zurück zum Ursprung" / Spar "S-Budget" / "Clever" / Baumarkt SKUs. There is no clean public bulk source for Austrian private labels (GS1 Austria is paid B2B; scraping `spar.at`/`hofer.at` violates ToS and breaks). The pattern that works is **OFF as a one-time bootstrap + a family-local cache as the real database** — but the cache needs real shopping to populate, so we ship v1 first.
+
+**Data model addition** (single migration):
+
+- `GroceryItem.Ean string?` (nullable, indexed).
+- `BarcodeLookup { string Ean (PK), string Name, int? DefaultStoreId, int Count, DateTime LastUsedAt }`. Family-local cache; one row per scanned EAN.
+
+**Lookup pipeline** (in `IGroceryService.LookupBarcodeAsync(string ean)`):
+
+1. **Local cache hit** → return `{ Name, DefaultStoreId, source: "local" }` and bump `Count`/`LastUsedAt`.
+2. **Open Food Facts** → `GET https://world.openfoodfacts.org/api/v2/product/{ean}.json` (`fields=product_name,product_name_de,brands,image_front_small_url`). Use a typed `HttpClient` with 3s timeout. Return `{ Name = product_name_de ?? product_name ?? "" }`. Cache the result locally on first save so step 1 catches it next time.
+3. **Miss** → return null. UI lets the user type the name and saves the EAN with the item so the cache populates.
+
+**UI** (in `AddItemDialog` / on the Liste page):
+
+- New scan icon next to the FAB (`MudIconButton`, `Icons.Material.Filled.QrCodeScanner`).
+- Tap → opens a camera dialog using the `BarcodeDetector` Web API on Chromium/Android, with a `@zxing/browser` fallback for iOS Safari (which still doesn't expose `BarcodeDetector` natively). Tiny ES module via `IJSRuntime` (`InvokeAsync<string>("cartstack.scan")`).
+- On detected EAN → call `LookupBarcodeAsync` → prefill name + store → user confirms.
+- Optional "An Open Food Facts senden" link on misses (deep-link to the OFF mobile app or the `world.openfoodfacts.org` contribute page) so we become a contributor over time.
+
+**Constraints to remember:**
+
+- Camera access requires HTTPS — so this works after Fly deploy (Phase 9), not over plain `http://localhost`. For local dev: use a dev tunnel (`dotnet dev-tunnels`) or `localhost` (browsers grant camera on `localhost` even over HTTP).
+- iOS Safari is the awkward platform — test there before declaring done.
+- Don't scrape Spar/Hofer. Don't pay for a barcode-lookup SaaS expecting Austrian private-label coverage; they don't have it.
+- Rate-limit OFF politely (one in-flight request, 5s debounce on repeated scans of the same code).
+
+**Gate:** scan a branded item (Coca-Cola) → OFF returns name → row added. Scan a private-label item not in OFF → empty form, user types "Joghurt natur 500g", saves → re-scan same EAN later → cache hits, name + store prefill. Commit: `Phase 4.5: barcode scanning`.
+
+---
+
 ## Phase 5 — Name typeahead (≈0.5h)
 
 **Goal:** typeahead so spellings stay consistent.
