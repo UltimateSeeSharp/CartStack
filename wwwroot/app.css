@@ -2,10 +2,47 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    overscroll-behavior: none;
 }
 
 h1:focus {
     outline: none;
+}
+
+/* Bottom nav (mobile only). MudBlazor d-md-none hides it on >=md. */
+.cs-bottom-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1100;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.cs-bottom-nav-item.active {
+    color: var(--mud-palette-primary);
+}
+
+/* Push main content above the bottom nav on phones so nothing is hidden. */
+@media (max-width: 959.98px) {
+    .cs-main {
+        padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    }
+}
+
+/* FAB position — bottom-right, lifted on mobile so it clears the bottom nav. */
+.cs-fab {
+    position: fixed;
+    right: 24px;
+    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    z-index: 1200;
+}
+
+@media (max-width: 959.98px) {
+    .cs-fab {
+        bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    }
 }
 
 .blazor-error-boundary {

@@ -1,0 +1,28 @@
+@inject NavigationManager Nav
+
+<MudButton Href="@Href"
+           Variant="Variant.Text"
+           Class="@CssClass"
+           Style="flex:1; min-width:0; flex-direction:column; padding:6px 0; border-radius:0;">
+    <MudIcon Icon="@Icon" Size="Size.Medium" />
+    <MudText Typo="Typo.caption" Class="mt-1">@Label</MudText>
+</MudButton>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter, EditorRequired] public string Icon { get; set; } = "";
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+    [Parameter] public string? CurrentUri { get; set; }
+
+    private bool IsActive
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(CurrentUri)) return false;
+            if (Href == "/") return CurrentUri == "/";
+            return CurrentUri == Href || CurrentUri.StartsWith(Href + "/");
+        }
+    }
+
+    private string CssClass => IsActive ? "cs-bottom-nav-item active" : "cs-bottom-nav-item";
+}

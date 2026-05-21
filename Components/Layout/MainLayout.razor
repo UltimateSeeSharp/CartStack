@@ -13,11 +13,13 @@
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Liste</MudButton>
-                <MudButton Href="/verlauf" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Verlauf</MudButton>
-                <MudButton Href="/favoriten" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Favoriten</MudButton>
-                <MudButton Href="/geschaefte" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Geschäfte</MudButton>
-                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+                <div class="d-none d-md-flex align-center">
+                    <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Liste</MudButton>
+                    <MudButton Href="/verlauf" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Verlauf</MudButton>
+                    <MudButton Href="/favoriten" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Favoriten</MudButton>
+                    <MudButton Href="/geschaefte" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Geschäfte</MudButton>
+                    <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+                </div>
                 <MudText Typo="Typo.body2" Class="mr-2">@context.User.Identity?.Name</MudText>
                 <MudIconButton Icon="@Icons.Material.Filled.Logout"
                                Href="/auth/sign-out"
@@ -26,9 +28,16 @@
             </Authorized>
         </AuthorizeView>
     </MudAppBar>
-    <MudMainContent>
+
+    <MudMainContent Class="cs-main">
         @Body
     </MudMainContent>
+
+    <AuthorizeView>
+        <Authorized>
+            <BottomNav />
+        </Authorized>
+    </AuthorizeView>
 </MudLayout>
 
 <div id="blazor-error-ui" data-nosnippet>

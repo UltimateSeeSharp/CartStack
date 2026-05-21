@@ -1,0 +1,29 @@
+@inject NavigationManager Nav
+
+<MudPaper Elevation="8" Square="true" Class="cs-bottom-nav d-flex d-md-none">
+    <BottomNavItem Href="/"          Icon="@Icons.Material.Filled.ShoppingCart" Label="Liste"     CurrentUri="@_uri" />
+    <BottomNavItem Href="/verlauf"   Icon="@Icons.Material.Filled.History"      Label="Verlauf"   CurrentUri="@_uri" />
+    <BottomNavItem Href="/favoriten" Icon="@Icons.Material.Filled.Star"         Label="Favoriten" CurrentUri="@_uri" />
+    <BottomNavItem Href="/geschaefte" Icon="@Icons.Material.Filled.Storefront"  Label="Geschäfte" CurrentUri="@_uri" />
+</MudPaper>
+
+@code {
+    private string _uri = "";
+
+    protected override void OnInitialized()
+    {
+        _uri = new Uri(Nav.Uri).AbsolutePath;
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _uri = new Uri(e.Location).AbsolutePath;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}
