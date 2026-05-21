@@ -149,23 +149,42 @@ A small mobile-first grocery list for the Vinci family (David, Julian, Angelika,
 
 **Gate:** deferred to Phase 9 (PWA install requires HTTPS, won't work against `localhost` from a phone). Commit: `Phase 8: PWA manifest`.
 
-## Phase 9 — Deploy to Fly.io (≈2h)
+## Phase 9 — Deploy to Fly.io + CI/CD on push to main (≈2.5h)
 
-**Goal:** family can actually use it.
+**Goal:** family can actually use it, and every push to `main` redeploys automatically.
+
+**Committed files (in this repo):**
 
 - `Dockerfile`: multi-stage `mcr.microsoft.com/dotnet/sdk:10.0` → `aspnet:10.0`, expose 8080, `ENTRYPOINT ["dotnet", "CartStack.dll"]`.
-- `fly.toml`: `app = "cartstack"` (or `cartstack-vinci` if taken), `primary_region = "fra"`, `internal_port = 8080`, `force_https = true`, `auto_stop_machines = "off"`, `min_machines_running = 1`.
-- `fly volumes create data --size 1 --region fra`, mount at `/data`, override connection string to `Data Source=/data/app.db`.
-- `fly launch --no-deploy` → `fly deploy`.
+- `.dockerignore`: excludes `bin/`, `obj/`, `.env*`, `*.db*`, `.git/`, `.github/`, etc. — small build context.
+- `fly.toml`: `app="cartstack"` (rename if taken), `primary_region="fra"`, port 8080, `force_https=true`, `auto_stop_machines="off"`, `min_machines_running=1`, volume `data` mounted at `/data`, `ConnectionStrings__Db=Data Source=/data/app.db` and `ASPNETCORE_ENVIRONMENT=Production` via `[env]`.
+- `.github/workflows/deploy.yml`: on push to `main`, `superfly/flyctl-actions/setup-flyctl` + `flyctl deploy --remote-only`. Concurrency-grouped so overlapping pushes serialize.
+
+**One-time manual setup (user runs, I don't):**
+
+1. `iwr https://fly.io/install.ps1 -useb | iex` then `fly auth login`.
+2. `fly launch --no-deploy --copy-config=false --name cartstack --region fra` (pick another name if taken; update `fly.toml` to match).
+3. `fly volumes create data --size 1 --region fra --yes`.
+4. `fly secrets set Family__Code=haus-1200 Family__Members=David,Julian,Angelika,Andreas` (values come from local `.env`).
+5. `fly tokens create deploy --expiry 8760h` → copy the `FlyV1 fm2_...` output → GitHub repo → Settings → Secrets and variables → Actions → New secret → name `FLY_API_TOKEN`, value paste.
+6. Push to GitHub: `git push -u origin main`.
 
 **Gate:**
-1. Open Fly URL on phone → login works.
-2. "Zum Home-Bildschirm" → standalone app launches.
-3. Two phones, two users → add on one → appears on the other within ~1s.
-4. `fly machine restart` → data persists (volume mount).
-5. Tab idle 10 min → reconnects on return.
+1. GitHub Actions → "Deploy to Fly.io" run is green after the first `git push origin main`.
+2. `https://cartstack.fly.dev/` loads the login page.
+3. Login works (family code from `fly secrets`; users seeded into the volume's `/data/app.db` on first start).
+4. Open Fly URL on a real phone → login works.
+5. "Zum Home-Bildschirm" → standalone app launches.
+6. Two phones, two users → add on one → appears on the other within ~1s.
+7. `fly machine restart` → data persists (volume mount).
+8. Tab idle 10 min → reconnects on return.
+9. Trivial commit on `main` → push → re-deploy runs and reaches prod in ~2 min.
 
-Commit: `Phase 9: deploy`. Tag `v1.0`.
+Commit individually:
+- `Phase 9: Dockerfile + fly.toml + .dockerignore`
+- `Phase 9: GitHub Actions deploy on push to main`
+
+Tag `v1.0` after the first successful end-to-end deploy.
 
 ---
 

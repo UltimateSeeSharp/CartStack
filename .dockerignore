@@ -1,0 +1,37 @@
+# Build output
+bin/
+obj/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Source control
+.git/
+.gitignore
+.gitattributes
+
+# CI
+.github/
+
+# Local SQLite (Fly volume holds the prod DB)
+*.db
+*.db-shm
+*.db-wal
+
+# Secrets — never bake into the image; Fly secrets inject at runtime
+.env
+.env.*
+
+# OS noise
+Thumbs.db
+.DS_Store
+
+# Docs and planning that don't affect the build
+ROADMAP.md
+README.md
+*.md
+!CLAUDE.md
