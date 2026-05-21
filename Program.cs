@@ -6,6 +6,7 @@ using CartStack.Data;
 using CartStack.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
@@ -25,6 +26,18 @@ builder.Services.AddMudServices();
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Db")));
 
+// Fly terminates TLS at the edge and forwards plain HTTP to the container,
+// so the app sees Request.IsHttps=false unless we trust X-Forwarded-Proto.
+// Without this, SecurePolicy.SameAsRequest emits cookies WITHOUT the Secure
+// flag, which iOS standalone-PWA Safari refuses to persist across launches
+// (the cookie survives the session in memory but is dropped on app close).
+builder.Services.Configure<ForwardedHeadersOptions>(opt =>
+{
+    opt.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    opt.KnownIPNetworks.Clear();
+    opt.KnownProxies.Clear();
+});
+
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(opt =>
@@ -32,7 +45,9 @@ builder.Services
         opt.Cookie.Name = "cartstack.auth";
         opt.Cookie.HttpOnly = true;
         opt.Cookie.SameSite = SameSiteMode.Lax;
-        opt.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        opt.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
         opt.LoginPath = "/login";
         opt.LogoutPath = "/auth/logout";
         opt.ExpireTimeSpan = TimeSpan.FromDays(365 * 10);
@@ -71,6 +86,7 @@ using (var scope = app.Services.CreateScope())
 
 if (!app.Environment.IsDevelopment())
 {
+    app.UseForwardedHeaders();
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }

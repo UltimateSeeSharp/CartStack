@@ -28,7 +28,9 @@ Family-code shared login + cookie auth. No ASP.NET Core Identity.
 
 - **Login flow** (`Components/Pages/Login.razor`): MudBlazor interactive form. Component validates `Family:Code` and the picked name in-process, mints a 30s data-protected ticket via `Auth/LoginTicketProtector.cs`, then `Nav.NavigateTo("/auth/sign-in?ticket=...", forceLoad: true)`. The static `MapGet("/auth/sign-in")` endpoint unprotects the ticket and calls `SignInAsync`. The ticket bridge exists because interactive Blazor handlers can't call `SignInAsync` — no `HttpContext` over the SignalR circuit.
 - **No raw `<form action="...">` anywhere.**
-- **Cookie**: `cartstack.auth`, `HttpOnly`, `SameSite=Lax`, `SecurePolicy=SameAsRequest`. Persistent until logout: `IsPersistent=true`, 10-year expiry, sliding.
+- **Cookie**: `cartstack.auth`, `HttpOnly`, `SameSite=Lax`. `SecurePolicy=Always` in production, `SameAsRequest` in development. Persistent until logout: `IsPersistent=true`, 10-year expiry, sliding.
+- **iOS standalone-PWA Safari drops non-`Secure` cookies on app close** — the cookie survives the session in memory but is gone the moment you reopen the PWA. That's why `SecurePolicy=Always` in production is mandatory, not optional.
+- **`ForwardedHeaders` middleware** runs in production (`UseForwardedHeaders` before auth) so `Request.IsHttps` reflects the Fly edge's HTTPS termination, not the plain-HTTP hop into the container — otherwise `SecurePolicy=Always` would emit no cookie at all because the framework would think the request is HTTP.
 - **`CurrentUserAccessor`** (scoped, `Services/CurrentUserAccessor.cs`) reads claims via `AuthenticationStateProvider`, **not** `IHttpContextAccessor` — the latter is unreliable across SSR/interactive boundaries in Blazor Web App.
 - **Logout**: `GET /auth/sign-out` (MudButton with `Href=...`, no form).
 
