@@ -1,0 +1,53 @@
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string"
+                          @bind-Value="_name"
+                          Label="Name"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          AutoFocus="true" />
+            <MudSelect T="int"
+                       @bind-Value="_storeId"
+                       Label="Standard-Geschäft"
+                       Variant="Variant.Outlined">
+                @foreach (var s in Stores)
+                {
+                    <MudSelectItem T="int" Value="@s.Id">@s.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!CanSubmit)"
+                   OnClick="Ok">
+            Speichern
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public IReadOnlyList<Store> Stores { get; set; } = [];
+
+    private string _name = "";
+    private int _storeId;
+
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name) && _storeId > 0;
+
+    protected override void OnInitialized()
+    {
+        _storeId = Stores.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void Ok()
+    {
+        if (!CanSubmit) return;
+        Dialog.Close(DialogResult.Ok((_name.Trim(), _storeId)));
+    }
+
+    private void Cancel() => Dialog.Cancel();
+}

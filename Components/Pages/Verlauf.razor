@@ -1,0 +1,130 @@
+@page "/verlauf"
+@implements IDisposable
+@inject IGroceryService Grocery
+@inject ChangeBroadcaster Broadcaster
+
+<PageTitle>CartStack — Verlauf</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
+    <MudText Typo="Typo.h5" Class="mb-4">Verlauf</MudText>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_days.Count == 0)
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2">Noch nichts gekauft.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        foreach (var day in _days)
+        {
+            <MudText Typo="Typo.overline" Class="mt-4 mb-1">@FormatDay(day.Date)</MudText>
+            <MudPaper Elevation="0">
+                <MudList T="GroceryItem" Dense="true">
+                    @foreach (var item in day.Items)
+                    {
+                        <MudListItem T="GroceryItem" Value="@item">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                <MudStack Spacing="0" Class="flex-grow-1">
+                                    <MudText Typo="Typo.body2">
+                                        @item.Name
+                                        @if (item.Qty > 1)
+                                        {
+                                            <MudText HtmlTag="span" Typo="Typo.caption" Class="ml-1">× @item.Qty</MudText>
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Default">
+                                        @(item.Store?.Name ?? "?") · von @(item.BoughtByUser?.Name ?? "?") · @item.BoughtAt?.ToLocalTime().ToString("HH:mm")
+                                    </MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Undo"
+                                               Size="Size.Small"
+                                               Color="Color.Default"
+                                               OnClick="@(() => UnmarkAsync(item.Id))" />
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+
+        @if (_hasMore)
+        {
+            <MudButton Variant="Variant.Text" Color="Color.Primary" FullWidth="true" Class="mt-4" OnClick="LoadMoreAsync">
+                Mehr laden
+            </MudButton>
+        }
+    }
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private List<DayGroup> _days = new();
+    private const int PageSize = 50;
+    private int _skip;
+    private bool _hasMore;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Broadcaster.Changed += OnChanged;
+        await LoadAsync(reset: true);
+    }
+
+    private async Task LoadAsync(bool reset)
+    {
+        if (reset)
+        {
+            _skip = 0;
+            _days.Clear();
+        }
+
+        var page = await Grocery.GetHistoryAsync(PageSize, _skip);
+        _skip += page.Count;
+        _hasMore = page.Count == PageSize;
+
+        foreach (var item in page)
+        {
+            var date = (item.BoughtAt ?? DateTime.UtcNow).ToLocalTime().Date;
+            var group = _days.FirstOrDefault(d => d.Date == date);
+            if (group is null)
+            {
+                group = new DayGroup(date, new List<GroceryItem>());
+                _days.Add(group);
+            }
+            group.Items.Add(item);
+        }
+
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadMoreAsync() => await LoadAsync(reset: false);
+
+    private async Task UnmarkAsync(int id) => await Grocery.UnmarkBoughtAsync(id);
+
+    private async void OnChanged(ChangeEvent e)
+    {
+        if (e.Kind is ChangeKind.ItemBought or ChangeKind.ItemUnbought or ChangeKind.ItemDeleted)
+        {
+            await InvokeAsync(() => LoadAsync(reset: true));
+        }
+    }
+
+    private static string FormatDay(DateTime date)
+    {
+        var today = DateTime.Today;
+        if (date == today) return "Heute";
+        if (date == today.AddDays(-1)) return "Gestern";
+        return date.ToString("dddd, d. MMMM");
+    }
+
+    public void Dispose() => Broadcaster.Changed -= OnChanged;
+
+    private record DayGroup(DateTime Date, List<GroceryItem> Items);
+}

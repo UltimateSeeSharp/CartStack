@@ -7,18 +7,22 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Dense="true">
-        CartStack
+        <MudLink Href="/" Color="Color.Inherit" Underline="Underline.None">
+            <MudText Typo="Typo.h6">CartStack</MudText>
+        </MudLink>
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-3">@context.User.Identity?.Name</MudText>
-                <MudButton Href="/auth/sign-out"
-                           Variant="Variant.Text"
-                           Color="Color.Inherit"
-                           Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.Logout">
-                    Abmelden
-                </MudButton>
+                <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Liste</MudButton>
+                <MudButton Href="/verlauf" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Verlauf</MudButton>
+                <MudButton Href="/favoriten" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Favoriten</MudButton>
+                <MudButton Href="/geschaefte" Variant="Variant.Text" Color="Color.Inherit" Size="Size.Small">Geschäfte</MudButton>
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+                <MudText Typo="Typo.body2" Class="mr-2">@context.User.Identity?.Name</MudText>
+                <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                               Href="/auth/sign-out"
+                               Color="Color.Inherit"
+                               Size="Size.Small" />
             </Authorized>
         </AuthorizeView>
     </MudAppBar>

@@ -8,10 +8,23 @@
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
 
-    @* Favorite chips placeholder — Phase 6 populates this *@
-    <MudPaper Class="pa-2 mb-4 d-flex" Elevation="0" Style="overflow-x:auto; gap:8px;">
-        <MudText Typo="Typo.caption" Color="Color.Default">Favoriten folgen…</MudText>
-    </MudPaper>
+    @if (_favorites.Count > 0)
+    {
+        <MudPaper Class="pa-2 mb-4 d-flex" Elevation="0" Style="overflow-x:auto; gap:8px;">
+            @foreach (var fav in _favorites)
+            {
+                var isPending = _pendingNames.Contains(fav.Name);
+                <MudChip T="int"
+                         Value="@fav.Id"
+                         Color="@(isPending ? Color.Default : Color.Primary)"
+                         Variant="@(isPending ? Variant.Outlined : Variant.Filled)"
+                         Disabled="@isPending"
+                         OnClick="@(() => QuickAddAsync(fav))">
+                    @fav.Name
+                </MudChip>
+            }
+        </MudPaper>
+    }
 
     @if (_loading)
     {
@@ -72,8 +85,12 @@
         OnClick="OpenAddDialog" />
 
 @code {
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
     private bool _loading = true;
     private List<StoreGroup> _groups = new();
+    private List<Favorite> _favorites = new();
+    private HashSet<string> _pendingNames = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -89,8 +106,24 @@
             .OrderBy(g => g.First().Store?.SortOrder ?? int.MaxValue)
             .Select(g => new StoreGroup(g.Key.StoreName, g.ToList()))
             .ToList();
+        _pendingNames = new HashSet<string>(items.Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
+        _favorites = (await Grocery.GetFavoritesAsync()).ToList();
         _loading = false;
         StateHasChanged();
+    }
+
+    private async Task QuickAddAsync(Favorite fav)
+    {
+        if (_pendingNames.Contains(fav.Name)) return;
+        try
+        {
+            await Grocery.AddItemAsync(fav.Name, 1, fav.DefaultStoreId);
+            Snackbar.Add($"{fav.Name} hinzugefügt", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     private async void OnChanged(ChangeEvent e)
@@ -99,7 +132,8 @@
             or ChangeKind.ItemBought
             or ChangeKind.ItemUnbought
             or ChangeKind.ItemDeleted
-            or ChangeKind.StoreChanged)
+            or ChangeKind.StoreChanged
+            or ChangeKind.FavoriteChanged)
         {
             await InvokeAsync(LoadAsync);
         }

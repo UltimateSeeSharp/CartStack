@@ -1,0 +1,154 @@
+@page "/geschaefte"
+@implements IDisposable
+@inject IGroceryService Grocery
+@inject ChangeBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>CartStack — Geschäfte</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h5" Class="flex-grow-1">Geschäfte</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="OpenAddDialog" />
+    </MudStack>
+
+    @if (_stores.Count == 0)
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2">Noch keine Geschäfte.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="0">
+            <MudList T="Store">
+                @for (var i = 0; i < _stores.Count; i++)
+                {
+                    var idx = i;
+                    var s = _stores[idx];
+                    <MudListItem T="Store" Value="@s">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                           Size="Size.Small"
+                                           Disabled="@(idx == 0)"
+                                           OnClick="@(() => MoveAsync(idx, -1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                           Size="Size.Small"
+                                           Disabled="@(idx == _stores.Count - 1)"
+                                           OnClick="@(() => MoveAsync(idx, 1))" />
+                            <MudText Typo="Typo.body1" Class="flex-grow-1">@s.Name</MudText>
+                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => RenameAsync(s))" />
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                           Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(s))" />
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<Store> _stores = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Broadcaster.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _stores = (await Grocery.GetStoresAsync()).ToList();
+        StateHasChanged();
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var name = await PromptAsync("Neues Geschäft", "Name");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        try
+        {
+            await Grocery.AddStoreAsync(name);
+            Snackbar.Add($"{name} hinzugefügt", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task RenameAsync(Store store)
+    {
+        var name = await PromptAsync("Umbenennen", "Name", store.Name);
+        if (string.IsNullOrWhiteSpace(name) || name == store.Name) return;
+        try
+        {
+            await Grocery.RenameStoreAsync(store.Id, name);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(Store store)
+    {
+        var ok = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Löschen?",
+            Message = $"„{store.Name}\" wirklich löschen?",
+            YesText = "Löschen",
+            CancelText = "Abbrechen",
+        });
+        if (ok != true) return;
+        try
+        {
+            await Grocery.DeleteStoreAsync(store.Id);
+            Snackbar.Add($"{store.Name} gelöscht", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task MoveAsync(int idx, int direction)
+    {
+        var target = idx + direction;
+        if (target < 0 || target >= _stores.Count) return;
+        (_stores[idx], _stores[target]) = (_stores[target], _stores[idx]);
+        await Grocery.ReorderStoresAsync(_stores.Select(s => s.Id).ToList());
+    }
+
+    private async Task<string?> PromptAsync(string title, string label, string initial = "")
+    {
+        var parameters = new DialogParameters<TextPromptDialog>
+        {
+            { x => x.Label, label },
+            { x => x.Initial, initial },
+        };
+        var dialog = await DialogService.ShowAsync<TextPromptDialog>(title, parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true,
+        });
+        var result = await dialog.Result;
+        return result?.Canceled == false ? result.Data as string : null;
+    }
+
+    private async void OnChanged(ChangeEvent e)
+    {
+        if (e.Kind == ChangeKind.StoreChanged)
+        {
+            await InvokeAsync(LoadAsync);
+        }
+    }
+
+    public void Dispose() => Broadcaster.Changed -= OnChanged;
+}

@@ -1,0 +1,140 @@
+@page "/favoriten"
+@implements IDisposable
+@inject IGroceryService Grocery
+@inject ChangeBroadcaster Broadcaster
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>CartStack — Favoriten</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h5" Class="flex-grow-1">Favoriten</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="OpenAddDialog" />
+    </MudStack>
+
+    @if (_favorites.Count == 0)
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Outlined.Star" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2">Noch keine Favoriten.</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Default" Align="Align.Center">
+                Häufig gekaufte Sachen wie „Milch&#xA0;→&#xA0;Spar" hier ablegen, dann mit einem Tap zur Liste hinzufügen.
+            </MudText>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="0">
+            <MudList T="Favorite">
+                @for (var i = 0; i < _favorites.Count; i++)
+                {
+                    var idx = i;
+                    var f = _favorites[idx];
+                    <MudListItem T="Favorite" Value="@f">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                           Size="Size.Small"
+                                           Disabled="@(idx == 0)"
+                                           OnClick="@(() => MoveAsync(idx, -1))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                           Size="Size.Small"
+                                           Disabled="@(idx == _favorites.Count - 1)"
+                                           OnClick="@(() => MoveAsync(idx, 1))" />
+                            <MudStack Spacing="0" Class="flex-grow-1">
+                                <MudText Typo="Typo.body1">@f.Name</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Default">
+                                    @(f.DefaultStore?.Name ?? "?")
+                                </MudText>
+                            </MudStack>
+                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                           Size="Size.Small"
+                                           OnClick="@(() => DeleteAsync(f))" />
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    private List<Favorite> _favorites = new();
+    private List<Store> _stores = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Broadcaster.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _favorites = (await Grocery.GetFavoritesAsync()).ToList();
+        _stores = (await Grocery.GetStoresAsync()).ToList();
+        StateHasChanged();
+    }
+
+    private async Task OpenAddDialog()
+    {
+        if (_stores.Count == 0)
+        {
+            Snackbar.Add("Zuerst ein Geschäft anlegen.", Severity.Warning);
+            return;
+        }
+
+        var parameters = new DialogParameters<FavoriteEditDialog>
+        {
+            { x => x.Stores, _stores },
+        };
+        var dialog = await DialogService.ShowAsync<FavoriteEditDialog>("Neuer Favorit", parameters, new DialogOptions
+        {
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true,
+        });
+        var result = await dialog.Result;
+        if (result is { Canceled: false, Data: ValueTuple<string, int> tuple })
+        {
+            try
+            {
+                await Grocery.AddFavoriteAsync(tuple.Item1, tuple.Item2);
+                Snackbar.Add($"{tuple.Item1} gespeichert", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteAsync(Favorite fav)
+    {
+        var ok = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Löschen?",
+            Message = $"Favorit „{fav.Name}\" löschen?",
+            YesText = "Löschen",
+            CancelText = "Abbrechen",
+        });
+        if (ok != true) return;
+        await Grocery.DeleteFavoriteAsync(fav.Id);
+    }
+
+    private async Task MoveAsync(int idx, int direction)
+    {
+        var target = idx + direction;
+        if (target < 0 || target >= _favorites.Count) return;
+        (_favorites[idx], _favorites[target]) = (_favorites[target], _favorites[idx]);
+        await Grocery.ReorderFavoritesAsync(_favorites.Select(f => f.Id).ToList());
+    }
+
+    private async void OnChanged(ChangeEvent e)
+    {
+        if (e.Kind is ChangeKind.FavoriteChanged or ChangeKind.StoreChanged)
+        {
+            await InvokeAsync(LoadAsync);
+        }
+    }
+
+    public void Dispose() => Broadcaster.Changed -= OnChanged;
+}
