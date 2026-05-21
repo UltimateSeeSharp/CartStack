@@ -1,3 +1,5 @@
+@inject IGroceryService Grocery
+
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
@@ -7,15 +9,42 @@
                           Variant="Variant.Outlined"
                           Immediate="true"
                           AutoFocus="true" />
-            <MudSelect T="int"
-                       @bind-Value="_storeId"
-                       Label="Standard-Geschäft"
-                       Variant="Variant.Outlined">
-                @foreach (var s in Stores)
+
+            <MudSelect T="int?"
+                       Value="_categoryId"
+                       ValueChanged="OnCategoryChanged"
+                       Label="Kategorie"
+                       Variant="Variant.Outlined"
+                       Clearable="true">
+                @foreach (var c in Categories)
                 {
-                    <MudSelectItem T="int" Value="@s.Id">@s.Name</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@((int?)c.Id)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@IconHelper.ForCategoryKey(c.IconKey)" Size="Size.Small" />
+                            <span>@c.Name</span>
+                        </MudStack>
+                    </MudSelectItem>
                 }
             </MudSelect>
+
+            @if (_categoryStores.Count > 0)
+            {
+                <MudSelect T="int?"
+                           @bind-Value="_storeId"
+                           Label="Standard-Geschäft"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (var s in _categoryStores)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)s.Id)">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <StoreLogo LogoSlug="@s.LogoSlug" StoreName="@s.Name" Size="Size.Small" />
+                                <span>@s.Name</span>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -31,23 +60,42 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public IReadOnlyList<Category> Categories { get; set; } = [];
     [Parameter] public IReadOnlyList<Store> Stores { get; set; } = [];
 
     private string _name = "";
-    private int _storeId;
+    private int? _categoryId;
+    private int? _storeId;
+    private IReadOnlyList<Store> _categoryStores = [];
 
-    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name) && _storeId > 0;
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name);
 
     protected override void OnInitialized()
     {
-        _storeId = Stores.FirstOrDefault()?.Id ?? 0;
+        RefreshCategoryStores();
+    }
+
+    private void OnCategoryChanged(int? value)
+    {
+        _categoryId = value;
+        _storeId = null;
+        RefreshCategoryStores();
+    }
+
+    private void RefreshCategoryStores()
+    {
+        _categoryStores = _categoryId is int cid
+            ? Stores.Where(s => s.CategoryId == cid).ToList()
+            : [];
     }
 
     private void Ok()
     {
         if (!CanSubmit) return;
-        Dialog.Close(DialogResult.Ok((_name.Trim(), _storeId)));
+        Dialog.Close(DialogResult.Ok(new FavoriteEditResult(_name.Trim(), _categoryId, _storeId)));
     }
 
     private void Cancel() => Dialog.Cancel();
+
+    public record FavoriteEditResult(string Name, int? CategoryId, int? StoreId);
 }

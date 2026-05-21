@@ -1,0 +1,31 @@
+@if (string.IsNullOrEmpty(LogoSlug))
+{
+    <MudAvatar Size="@Size" Style="@LetterStyle">@Letter</MudAvatar>
+}
+else
+{
+    <span style="@WrapperStyle" title="@StoreName">
+        <img src="@($"/logos/{LogoSlug}.svg")"
+             alt="@(StoreName ?? LogoSlug)"
+             style="width:100%; height:100%; object-fit:contain;" />
+    </span>
+}
+
+@code {
+    [Parameter] public string? LogoSlug { get; set; }
+    [Parameter] public string? StoreName { get; set; }
+    [Parameter] public Size Size { get; set; } = Size.Small;
+
+    private string Letter => string.IsNullOrEmpty(StoreName) ? "?" : StoreName[..1].ToUpperInvariant();
+
+    private int Px => Size switch
+    {
+        Size.Large => 40,
+        Size.Medium => 32,
+        _ => 24,
+    };
+
+    private string WrapperStyle => $"display:inline-flex; width:{Px}px; height:{Px}px; align-items:center; justify-content:center; flex-shrink:0;";
+
+    private string LetterStyle => $"width:{Px}px; height:{Px}px; font-size:{(int)(Px * 0.45)}px;";
+}

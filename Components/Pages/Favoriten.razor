@@ -41,10 +41,20 @@
                                            Size="Size.Small"
                                            Disabled="@(idx == _favorites.Count - 1)"
                                            OnClick="@(() => MoveAsync(idx, 1))" />
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                @if (f.DefaultCategory is not null)
+                                {
+                                    <MudIcon Icon="@IconHelper.ForCategoryKey(f.DefaultCategory.IconKey)" Size="Size.Small" />
+                                }
+                                @if (f.DefaultStore is not null)
+                                {
+                                    <StoreLogo LogoSlug="@f.DefaultStore.LogoSlug" StoreName="@f.DefaultStore.Name" Size="Size.Small" />
+                                }
+                            </MudStack>
                             <MudStack Spacing="0" Class="flex-grow-1">
                                 <MudText Typo="Typo.body1">@f.Name</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Default">
-                                    @(f.DefaultStore?.Name ?? "?")
+                                    @FormatLocation(f)
                                 </MudText>
                             </MudStack>
                             <MudIconButton Icon="@Icons.Material.Outlined.Delete"
@@ -60,6 +70,7 @@
 
 @code {
     private List<Favorite> _favorites = new();
+    private List<Category> _categories = new();
     private List<Store> _stores = new();
 
     protected override async Task OnInitializedAsync()
@@ -71,20 +82,22 @@
     private async Task LoadAsync()
     {
         _favorites = (await Grocery.GetFavoritesAsync()).ToList();
+        _categories = (await Grocery.GetCategoriesAsync()).ToList();
         _stores = (await Grocery.GetStoresAsync()).ToList();
         StateHasChanged();
     }
 
     private async Task OpenAddDialog()
     {
-        if (_stores.Count == 0)
+        if (_categories.Count == 0)
         {
-            Snackbar.Add("Zuerst ein Geschäft anlegen.", Severity.Warning);
+            Snackbar.Add("Noch keine Kategorien.", Severity.Warning);
             return;
         }
 
         var parameters = new DialogParameters<FavoriteEditDialog>
         {
+            { x => x.Categories, _categories },
             { x => x.Stores, _stores },
         };
         var dialog = await DialogService.ShowAsync<FavoriteEditDialog>("Neuer Favorit", parameters, new DialogOptions
@@ -93,12 +106,12 @@
             FullWidth = true,
         });
         var result = await dialog.Result;
-        if (result is { Canceled: false, Data: ValueTuple<string, int> tuple })
+        if (result is { Canceled: false, Data: FavoriteEditDialog.FavoriteEditResult r })
         {
             try
             {
-                await Grocery.AddFavoriteAsync(tuple.Item1, tuple.Item2);
-                Snackbar.Add($"{tuple.Item1} gespeichert", Severity.Success);
+                await Grocery.AddFavoriteAsync(r.Name, r.CategoryId, r.StoreId);
+                Snackbar.Add($"{r.Name} gespeichert", Severity.Success);
             }
             catch (Exception ex)
             {
@@ -126,6 +139,13 @@
         if (target < 0 || target >= _favorites.Count) return;
         (_favorites[idx], _favorites[target]) = (_favorites[target], _favorites[idx]);
         await Grocery.ReorderFavoritesAsync(_favorites.Select(f => f.Id).ToList());
+    }
+
+    private static string FormatLocation(Favorite f)
+    {
+        if (f.DefaultStore is not null) return f.DefaultStore.Name;
+        if (f.DefaultCategory is not null) return f.DefaultCategory.Name;
+        return "Ohne Kategorie";
     }
 
     private async void OnChanged(ChangeEvent e)

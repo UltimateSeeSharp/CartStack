@@ -4,19 +4,28 @@
 <MudDialog>
     <DialogContent>
         <MudStack Spacing="3">
-            <MudAutocomplete T="string"
-                             @bind-Value="_name"
-                             Label="Was?"
-                             Variant="Variant.Outlined"
-                             SearchFunc="SearchNamesAsync"
-                             CoerceText="true"
-                             CoerceValue="true"
-                             ResetValueOnEmptyText="false"
-                             MaxItems="5"
-                             DebounceInterval="120"
-                             ShowProgressIndicator="false"
-                             OpenOnFocus="false"
-                             AutoFocus="true" />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <div class="flex-grow-1">
+                    <MudAutocomplete T="string"
+                                     @bind-Value="_name"
+                                     Label="Was?"
+                                     Variant="Variant.Outlined"
+                                     SearchFunc="SearchNamesAsync"
+                                     CoerceText="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="5"
+                                     DebounceInterval="120"
+                                     ShowProgressIndicator="false"
+                                     OpenOnFocus="false"
+                                     AutoFocus="true" />
+                </div>
+                <MudTooltip Text="Bald verfügbar">
+                    <MudIconButton Icon="@Icons.Material.Filled.QrCodeScanner"
+                                   Color="Color.Default"
+                                   Disabled="true" />
+                </MudTooltip>
+            </MudStack>
 
             <MudNumericField T="int"
                              @bind-Value="_qty"
@@ -25,15 +34,41 @@
                              Min="1"
                              Max="99" />
 
-            <MudSelect T="int"
-                       @bind-Value="_storeId"
-                       Label="Wo?"
-                       Variant="Variant.Outlined">
-                @foreach (var s in _stores)
+            <MudSelect T="int?"
+                       Value="_categoryId"
+                       ValueChanged="OnCategoryChanged"
+                       Label="Kategorie"
+                       Variant="Variant.Outlined"
+                       Clearable="true">
+                @foreach (var c in _categories)
                 {
-                    <MudSelectItem T="int" Value="@s.Id">@s.Name</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@((int?)c.Id)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@IconHelper.ForCategoryKey(c.IconKey)" Size="Size.Small" />
+                            <span>@c.Name</span>
+                        </MudStack>
+                    </MudSelectItem>
                 }
             </MudSelect>
+
+            @if (_categoryStores.Count > 0)
+            {
+                <MudSelect T="int?"
+                           @bind-Value="_storeId"
+                           Label="Geschäft"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (var s in _categoryStores)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)s.Id)">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <StoreLogo LogoSlug="@s.LogoSlug" StoreName="@s.Name" Size="Size.Small" />
+                                <span>@s.Name</span>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            }
         </MudStack>
     </DialogContent>
     <DialogActions>
@@ -49,20 +84,54 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public int? PrefillCategoryId { get; set; }
     [Parameter] public int? PrefillStoreId { get; set; }
 
     private string _name = "";
     private int _qty = 1;
-    private int _storeId;
-    private IReadOnlyList<Store> _stores = [];
+    private int? _categoryId;
+    private int? _storeId;
+    private IReadOnlyList<Category> _categories = [];
+    private IReadOnlyList<Store> _allStores = [];
+    private IReadOnlyList<Store> _categoryStores = [];
     private bool _submitting;
 
-    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name) && _storeId > 0;
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name);
 
     protected override async Task OnInitializedAsync()
     {
-        _stores = await Grocery.GetStoresAsync();
-        _storeId = PrefillStoreId ?? _stores.FirstOrDefault()?.Id ?? 0;
+        _categories = await Grocery.GetCategoriesAsync();
+        _allStores = await Grocery.GetStoresAsync();
+
+        if (PrefillStoreId is int sid)
+        {
+            var store = _allStores.FirstOrDefault(s => s.Id == sid);
+            if (store is not null)
+            {
+                _categoryId = store.CategoryId;
+                _storeId = sid;
+            }
+        }
+        else if (PrefillCategoryId is int cid)
+        {
+            _categoryId = cid;
+        }
+
+        RefreshCategoryStores();
+    }
+
+    private void OnCategoryChanged(int? value)
+    {
+        _categoryId = value;
+        _storeId = null;
+        RefreshCategoryStores();
+    }
+
+    private void RefreshCategoryStores()
+    {
+        _categoryStores = _categoryId is int cid
+            ? _allStores.Where(s => s.CategoryId == cid).ToList()
+            : [];
     }
 
     private async Task SubmitAsync()
@@ -71,7 +140,7 @@
         _submitting = true;
         try
         {
-            var item = await Grocery.AddItemAsync(_name, _qty, _storeId);
+            var item = await Grocery.AddItemAsync(_name, _qty, _categoryId, _storeId);
             Snackbar.Add($"{item.Name} hinzugefügt", Severity.Success);
             Dialog.Close(DialogResult.Ok(item.Id));
         }

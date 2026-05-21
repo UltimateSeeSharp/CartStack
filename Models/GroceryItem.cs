@@ -7,7 +7,10 @@ public class GroceryItem
     public int Qty { get; set; } = 1;
     public string? Notes { get; set; }
 
-    public int StoreId { get; set; }
+    public int? CategoryId { get; set; }
+    public Category? Category { get; set; }
+
+    public int? StoreId { get; set; }
     public Store? Store { get; set; }
 
     public ItemStatus Status { get; set; } = ItemStatus.Pending;

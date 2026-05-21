@@ -1,13 +1,9 @@
 namespace CartStack.Models;
 
-public class Store
+public class Category
 {
     public int Id { get; set; }
     public required string Name { get; set; }
+    public required string IconKey { get; set; }
     public int SortOrder { get; set; }
-
-    public int CategoryId { get; set; }
-    public Category? Category { get; set; }
-
-    public string? LogoSlug { get; set; }
 }

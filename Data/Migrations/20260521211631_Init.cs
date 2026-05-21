@@ -12,17 +12,18 @@ namespace CartStack.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "Stores",
+                name: "Categories",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     Name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    IconKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
                     SortOrder = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Stores", x => x.Id);
+                    table.PrimaryKey("PK_Categories", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -40,18 +41,47 @@ namespace CartStack.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Stores",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    SortOrder = table.Column<int>(type: "INTEGER", nullable: false),
+                    CategoryId = table.Column<int>(type: "INTEGER", nullable: false),
+                    LogoSlug = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Stores", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Stores_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Favorites",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     Name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    DefaultStoreId = table.Column<int>(type: "INTEGER", nullable: false),
+                    DefaultCategoryId = table.Column<int>(type: "INTEGER", nullable: true),
+                    DefaultStoreId = table.Column<int>(type: "INTEGER", nullable: true),
                     SortOrder = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Favorites", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Favorites_Categories_DefaultCategoryId",
+                        column: x => x.DefaultCategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Favorites_Stores_DefaultStoreId",
                         column: x => x.DefaultStoreId,
@@ -69,7 +99,8 @@ namespace CartStack.Data.Migrations
                     Name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
                     Qty = table.Column<int>(type: "INTEGER", nullable: false),
                     Notes = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
-                    StoreId = table.Column<int>(type: "INTEGER", nullable: false),
+                    CategoryId = table.Column<int>(type: "INTEGER", nullable: true),
+                    StoreId = table.Column<int>(type: "INTEGER", nullable: true),
                     Status = table.Column<int>(type: "INTEGER", nullable: false),
                     AddedByUserId = table.Column<int>(type: "INTEGER", nullable: false),
                     AddedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
@@ -79,6 +110,12 @@ namespace CartStack.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_GroceryItems", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_GroceryItems_Categories_CategoryId",
+                        column: x => x.CategoryId,
+                        principalTable: "Categories",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_GroceryItems_Stores_StoreId",
                         column: x => x.StoreId,
@@ -98,6 +135,17 @@ namespace CartStack.Data.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Categories_Name",
+                table: "Categories",
+                column: "Name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Favorites_DefaultCategoryId",
+                table: "Favorites",
+                column: "DefaultCategoryId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Favorites_DefaultStoreId",
@@ -126,6 +174,11 @@ namespace CartStack.Data.Migrations
                 column: "BoughtByUserId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_GroceryItems_CategoryId",
+                table: "GroceryItems",
+                column: "CategoryId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_GroceryItems_Status",
                 table: "GroceryItems",
                 column: "Status");
@@ -136,9 +189,9 @@ namespace CartStack.Data.Migrations
                 column: "StoreId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Stores_Name",
+                name: "IX_Stores_CategoryId_Name",
                 table: "Stores",
-                column: "Name",
+                columns: new[] { "CategoryId", "Name" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -162,6 +215,9 @@ namespace CartStack.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "Users");
+
+            migrationBuilder.DropTable(
+                name: "Categories");
         }
     }
 }

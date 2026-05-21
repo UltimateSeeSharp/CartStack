@@ -31,6 +31,19 @@
                         <MudListItem T="GroceryItem" Value="@item">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                 <MudIcon Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    @{
+                                        var effectiveCategory = item.Store?.Category ?? item.Category;
+                                    }
+                                    @if (effectiveCategory is not null)
+                                    {
+                                        <MudIcon Icon="@IconHelper.ForCategoryKey(effectiveCategory.IconKey)" Size="Size.Small" />
+                                    }
+                                    @if (item.Store is not null)
+                                    {
+                                        <StoreLogo LogoSlug="@item.Store.LogoSlug" StoreName="@item.Store.Name" Size="Size.Small" />
+                                    }
+                                </MudStack>
                                 <MudStack Spacing="0" Class="flex-grow-1">
                                     <MudText Typo="Typo.body2">
                                         @item.Name
@@ -40,7 +53,7 @@
                                         }
                                     </MudText>
                                     <MudText Typo="Typo.caption" Color="Color.Default">
-                                        @(item.Store?.Name ?? "?") · von @(item.BoughtByUser?.Name ?? "?") · @item.BoughtAt?.ToLocalTime().ToString("HH:mm")
+                                        @FormatLocation(item) · von @(item.BoughtByUser?.Name ?? "?") · @item.BoughtAt?.ToLocalTime().ToString("HH:mm")
                                     </MudText>
                                 </MudStack>
                                 <MudIconButton Icon="@Icons.Material.Outlined.Undo"
@@ -107,6 +120,13 @@
     private async Task LoadMoreAsync() => await LoadAsync(reset: false);
 
     private async Task UnmarkAsync(int id) => await Grocery.UnmarkBoughtAsync(id);
+
+    private static string FormatLocation(GroceryItem item)
+    {
+        if (item.Store is not null) return item.Store.Name;
+        if (item.Category is not null) return item.Category.Name;
+        return "Ohne Kategorie";
+    }
 
     private async void OnChanged(ChangeEvent e)
     {

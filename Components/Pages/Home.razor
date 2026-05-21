@@ -3,6 +3,7 @@
 @inject IGroceryService Grocery
 @inject ChangeBroadcaster Broadcaster
 @inject IDialogService DialogService
+@inject IJSRuntime JS
 
 <PageTitle>CartStack — Liste</PageTitle>
 
@@ -30,7 +31,7 @@
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
-    else if (_groups.Count == 0)
+    else if (_items.Count == 0)
     {
         <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
             <MudIcon Icon="@Icons.Material.Outlined.ShoppingBasket" Size="Size.Large" Color="Color.Default" />
@@ -40,42 +41,60 @@
     }
     else
     {
-        foreach (var group in _groups)
-        {
-            <MudText Typo="Typo.overline" Class="mt-4 mb-1">@group.StoreName</MudText>
-            <MudPaper Elevation="0" Class="mb-2">
-                <MudList T="GroceryItem" Dense="false">
-                    @foreach (var item in group.Items)
-                    {
-                        <MudListItem T="GroceryItem" Value="@item">
-                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                                <MudCheckBox T="bool"
-                                             Value="false"
-                                             ValueChanged="@(_ => MarkBoughtAsync(item.Id))"
-                                             Size="Size.Large"
-                                             Color="Color.Primary" />
-                                <MudStack Spacing="0" Class="flex-grow-1">
-                                    <MudText Typo="Typo.body1">
-                                        @item.Name
-                                        @if (item.Qty > 1)
-                                        {
-                                            <MudText HtmlTag="span" Typo="Typo.body2" Color="Color.Default" Class="ml-1">× @item.Qty</MudText>
-                                        }
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Default">
-                                        von @(item.AddedByUser?.Name ?? "?")
-                                    </MudText>
-                                </MudStack>
-                                <MudIconButton Icon="@Icons.Material.Outlined.Delete"
-                                               Size="Size.Small"
-                                               Color="Color.Default"
-                                               OnClick="@(() => DeleteAsync(item.Id))" />
+        <MudTabs Elevation="0"
+                 Rounded="false"
+                 ActivePanelIndex="_activeTab"
+                 ActivePanelIndexChanged="OnTabChangedAsync"
+                 Class="mb-2">
+            <MudTabPanel Text="Alle">
+                <MudPaper Elevation="0">
+                    <MudList T="GroceryItem">
+                        @foreach (var item in _items)
+                        {
+                            @RenderItemRow(item, showLocation: true)
+                        }
+                    </MudList>
+                </MudPaper>
+            </MudTabPanel>
+            <MudTabPanel Text="Nach Kategorie">
+                @foreach (var group in _groupedByCategory)
+                {
+                    <MudText Typo="Typo.overline" Class="mt-4 mb-1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            @if (group.Category is not null)
+                            {
+                                <MudIcon Icon="@IconHelper.ForCategoryKey(group.Category.IconKey)" Size="Size.Small" />
+                            }
+                            <span>@group.Label</span>
+                        </MudStack>
+                    </MudText>
+                    <MudPaper Elevation="0" Class="mb-2">
+                        @if (group.LooseItems.Count > 0)
+                        {
+                            <MudList T="GroceryItem">
+                                @foreach (var item in group.LooseItems)
+                                {
+                                    @RenderItemRow(item, showLocation: false)
+                                }
+                            </MudList>
+                        }
+                        @foreach (var sub in group.StoreSubGroups)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="px-3 pt-2" Spacing="2">
+                                <StoreLogo LogoSlug="@sub.Store.LogoSlug" StoreName="@sub.Store.Name" Size="Size.Small" />
+                                <MudText Typo="Typo.caption" Color="Color.Default">@sub.Store.Name</MudText>
                             </MudStack>
-                        </MudListItem>
-                    }
-                </MudList>
-            </MudPaper>
-        }
+                            <MudList T="GroceryItem">
+                                @foreach (var item in sub.Items)
+                                {
+                                    @RenderItemRow(item, showLocation: false)
+                                }
+                            </MudList>
+                        }
+                    </MudPaper>
+                }
+            </MudTabPanel>
+        </MudTabs>
     }
 </MudContainer>
 
@@ -88,7 +107,10 @@
     [Inject] private ISnackbar Snackbar { get; set; } = null!;
 
     private bool _loading = true;
-    private List<StoreGroup> _groups = new();
+    private bool _restoredTab;
+    private int _activeTab;
+    private List<GroceryItem> _items = new();
+    private List<CategoryGroup> _groupedByCategory = new();
     private List<Favorite> _favorites = new();
     private HashSet<string> _pendingNames = new(StringComparer.OrdinalIgnoreCase);
 
@@ -98,26 +120,119 @@
         await LoadAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_restoredTab)
+        {
+            _restoredTab = true;
+            try
+            {
+                var stored = await JS.InvokeAsync<string?>("localStorage.getItem", "cs.liste.tab");
+                if (int.TryParse(stored, out var idx) && idx is >= 0 and <= 1 && idx != _activeTab)
+                {
+                    _activeTab = idx;
+                    StateHasChanged();
+                }
+            }
+            catch { /* SSR or no JS, ignore */ }
+        }
+    }
+
+    private async Task OnTabChangedAsync(int idx)
+    {
+        _activeTab = idx;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", "cs.liste.tab", idx.ToString()); }
+        catch { /* ignore */ }
+    }
+
     private async Task LoadAsync()
     {
-        var items = await Grocery.GetPendingItemsAsync();
-        _groups = items
-            .GroupBy(i => new { i.StoreId, StoreName = i.Store?.Name ?? "?" })
-            .OrderBy(g => g.First().Store?.SortOrder ?? int.MaxValue)
-            .Select(g => new StoreGroup(g.Key.StoreName, g.ToList()))
-            .ToList();
-        _pendingNames = new HashSet<string>(items.Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
+        _items = (await Grocery.GetPendingItemsAsync()).ToList();
+        _groupedByCategory = BuildCategoryGroups(_items);
+        _pendingNames = new HashSet<string>(_items.Select(i => i.Name), StringComparer.OrdinalIgnoreCase);
         _favorites = (await Grocery.GetFavoritesAsync()).ToList();
         _loading = false;
         StateHasChanged();
     }
+
+    private static List<CategoryGroup> BuildCategoryGroups(IReadOnlyList<GroceryItem> items)
+    {
+        var groups = items
+            .GroupBy(i => i.Store?.Category ?? i.Category)
+            .Select(g =>
+            {
+                var category = g.Key;
+                var withStore = g.Where(i => i.Store is not null)
+                    .GroupBy(i => i.Store!)
+                    .Select(sg => new StoreSubGroup(sg.Key, sg.OrderBy(i => i.AddedAt).ToList()))
+                    .OrderBy(sg => sg.Store.SortOrder)
+                    .ThenBy(sg => sg.Store.Name)
+                    .ToList();
+                var loose = g.Where(i => i.Store is null).OrderBy(i => i.AddedAt).ToList();
+                return new CategoryGroup(
+                    category,
+                    category?.Name ?? "Ohne Kategorie",
+                    loose,
+                    withStore,
+                    category?.SortOrder ?? int.MaxValue);
+            })
+            .OrderBy(g => g.SortOrder)
+            .ThenBy(g => g.Label)
+            .ToList();
+        return groups;
+    }
+
+    private RenderFragment RenderItemRow(GroceryItem item, bool showLocation) => __builder =>
+    {
+        <MudListItem T="GroceryItem" Value="@item">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudCheckBox T="bool"
+                             Value="false"
+                             ValueChanged="@(_ => MarkBoughtAsync(item.Id))"
+                             Size="Size.Large"
+                             Color="Color.Primary" />
+                @{
+                    var effectiveCategory = item.Store?.Category ?? item.Category;
+                }
+                @if (showLocation && (effectiveCategory is not null || item.Store is not null))
+                {
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Style="min-width:0;">
+                        @if (effectiveCategory is not null)
+                        {
+                            <MudIcon Icon="@IconHelper.ForCategoryKey(effectiveCategory.IconKey)" Size="Size.Small" />
+                        }
+                        @if (item.Store is not null)
+                        {
+                            <StoreLogo LogoSlug="@item.Store.LogoSlug" StoreName="@item.Store.Name" Size="Size.Small" />
+                        }
+                    </MudStack>
+                }
+                <MudStack Spacing="0" Class="flex-grow-1">
+                    <MudText Typo="Typo.body1">
+                        @item.Name
+                        @if (item.Qty > 1)
+                        {
+                            <MudText HtmlTag="span" Typo="Typo.body2" Color="Color.Default" Class="ml-1">× @item.Qty</MudText>
+                        }
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Default">
+                        von @(item.AddedByUser?.Name ?? "?")
+                    </MudText>
+                </MudStack>
+                <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                               Size="Size.Small"
+                               Color="Color.Default"
+                               OnClick="@(() => DeleteAsync(item.Id))" />
+            </MudStack>
+        </MudListItem>
+    };
 
     private async Task QuickAddAsync(Favorite fav)
     {
         if (_pendingNames.Contains(fav.Name)) return;
         try
         {
-            await Grocery.AddItemAsync(fav.Name, 1, fav.DefaultStoreId);
+            await Grocery.AddItemAsync(fav.Name, 1, fav.DefaultCategoryId, fav.DefaultStoreId);
             Snackbar.Add($"{fav.Name} hinzugefügt", Severity.Success);
         }
         catch (Exception ex)
@@ -159,5 +274,6 @@
         Broadcaster.Changed -= OnChanged;
     }
 
-    private record StoreGroup(string StoreName, List<GroceryItem> Items);
+    private record CategoryGroup(Category? Category, string Label, List<GroceryItem> LooseItems, List<StoreSubGroup> StoreSubGroups, int SortOrder);
+    private record StoreSubGroup(Store Store, List<GroceryItem> Items);
 }

@@ -8,53 +8,71 @@
 <PageTitle>CartStack — Geschäfte</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-        <MudText Typo="Typo.h5" Class="flex-grow-1">Geschäfte</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" OnClick="OpenAddDialog" />
-    </MudStack>
+    <MudText Typo="Typo.h5" Class="mb-4">Geschäfte</MudText>
 
-    @if (_stores.Count == 0)
+    @if (_categories.Count == 0)
     {
-        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
-            <MudIcon Icon="@Icons.Material.Outlined.Storefront" Size="Size.Large" Color="Color.Default" />
-            <MudText Typo="Typo.body1" Class="mt-2">Noch keine Geschäfte.</MudText>
-        </MudPaper>
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
     }
     else
     {
-        <MudPaper Elevation="0">
-            <MudList T="Store">
-                @for (var i = 0; i < _stores.Count; i++)
+        foreach (var category in _categories)
+        {
+            var stores = _storesByCategory.TryGetValue(category.Id, out var list) ? list : new List<Store>();
+            <MudPaper Elevation="0" Class="mb-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="px-1 py-2">
+                    <MudIcon Icon="@IconHelper.ForCategoryKey(category.IconKey)" Size="Size.Medium" />
+                    <MudText Typo="Typo.h6" Class="flex-grow-1">@category.Name</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                   Color="Color.Primary"
+                                   Size="Size.Small"
+                                   OnClick="@(() => AddStoreAsync(category))" />
+                </MudStack>
+
+                @if (stores.Count == 0)
                 {
-                    var idx = i;
-                    var s = _stores[idx];
-                    <MudListItem T="Store" Value="@s">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
-                                           Size="Size.Small"
-                                           Disabled="@(idx == 0)"
-                                           OnClick="@(() => MoveAsync(idx, -1))" />
-                            <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
-                                           Size="Size.Small"
-                                           Disabled="@(idx == _stores.Count - 1)"
-                                           OnClick="@(() => MoveAsync(idx, 1))" />
-                            <MudText Typo="Typo.body1" Class="flex-grow-1">@s.Name</MudText>
-                            <MudIconButton Icon="@Icons.Material.Outlined.Edit"
-                                           Size="Size.Small"
-                                           OnClick="@(() => RenameAsync(s))" />
-                            <MudIconButton Icon="@Icons.Material.Outlined.Delete"
-                                           Size="Size.Small"
-                                           OnClick="@(() => DeleteAsync(s))" />
-                        </MudStack>
-                    </MudListItem>
+                    <MudText Typo="Typo.caption" Color="Color.Default" Class="px-3 pb-2">
+                        Noch keine Geschäfte.
+                    </MudText>
                 }
-            </MudList>
-        </MudPaper>
+                else
+                {
+                    <MudList T="Store">
+                        @for (var i = 0; i < stores.Count; i++)
+                        {
+                            var idx = i;
+                            var store = stores[idx];
+                            <MudListItem T="Store" Value="@store">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp"
+                                                   Size="Size.Small"
+                                                   Disabled="@(idx == 0)"
+                                                   OnClick="@(() => MoveAsync(category.Id, idx, -1))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown"
+                                                   Size="Size.Small"
+                                                   Disabled="@(idx == stores.Count - 1)"
+                                                   OnClick="@(() => MoveAsync(category.Id, idx, 1))" />
+                                    <StoreLogo LogoSlug="@store.LogoSlug" StoreName="@store.Name" Size="Size.Small" />
+                                    <MudText Typo="Typo.body1" Class="flex-grow-1">@store.Name</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => RenameAsync(store))" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => DeleteAsync(store))" />
+                                </MudStack>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudPaper>
+        }
     }
 </MudContainer>
 
 @code {
-    private List<Store> _stores = new();
+    private List<Category> _categories = new();
+    private Dictionary<int, List<Store>> _storesByCategory = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -64,17 +82,21 @@
 
     private async Task LoadAsync()
     {
-        _stores = (await Grocery.GetStoresAsync()).ToList();
+        _categories = (await Grocery.GetCategoriesAsync()).ToList();
+        var all = await Grocery.GetStoresAsync();
+        _storesByCategory = all
+            .GroupBy(s => s.CategoryId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(s => s.SortOrder).ThenBy(s => s.Name).ToList());
         StateHasChanged();
     }
 
-    private async Task OpenAddDialog()
+    private async Task AddStoreAsync(Category category)
     {
-        var name = await PromptAsync("Neues Geschäft", "Name");
+        var name = await PromptAsync($"Neues Geschäft in {category.Name}", "Name");
         if (string.IsNullOrWhiteSpace(name)) return;
         try
         {
-            await Grocery.AddStoreAsync(name);
+            await Grocery.AddStoreAsync(name, category.Id);
             Snackbar.Add($"{name} hinzugefügt", Severity.Success);
         }
         catch (Exception ex)
@@ -118,12 +140,13 @@
         }
     }
 
-    private async Task MoveAsync(int idx, int direction)
+    private async Task MoveAsync(int categoryId, int idx, int direction)
     {
+        if (!_storesByCategory.TryGetValue(categoryId, out var stores)) return;
         var target = idx + direction;
-        if (target < 0 || target >= _stores.Count) return;
-        (_stores[idx], _stores[target]) = (_stores[target], _stores[idx]);
-        await Grocery.ReorderStoresAsync(_stores.Select(s => s.Id).ToList());
+        if (target < 0 || target >= stores.Count) return;
+        (stores[idx], stores[target]) = (stores[target], stores[idx]);
+        await Grocery.ReorderStoresAsync(stores.Select(s => s.Id).ToList());
     }
 
     private async Task<string?> PromptAsync(string title, string label, string initial = "")

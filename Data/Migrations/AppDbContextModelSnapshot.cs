@@ -17,13 +17,43 @@ namespace CartStack.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.8");
 
+            modelBuilder.Entity("CartStack.Models.Category", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Categories");
+                });
+
             modelBuilder.Entity("CartStack.Models.Favorite", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("DefaultStoreId")
+                    b.Property<int?>("DefaultCategoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("DefaultStoreId")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
@@ -35,6 +65,8 @@ namespace CartStack.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DefaultCategoryId");
 
                     b.HasIndex("DefaultStoreId");
 
@@ -62,6 +94,9 @@ namespace CartStack.Data.Migrations
                     b.Property<int?>("BoughtByUserId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("CategoryId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -77,7 +112,7 @@ namespace CartStack.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("StoreId")
+                    b.Property<int?>("StoreId")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
@@ -87,6 +122,8 @@ namespace CartStack.Data.Migrations
                     b.HasIndex("BoughtAt");
 
                     b.HasIndex("BoughtByUserId");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("Status");
 
@@ -101,6 +138,13 @@ namespace CartStack.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LogoSlug")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -111,7 +155,7 @@ namespace CartStack.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("CategoryId", "Name")
                         .IsUnique();
 
                     b.ToTable("Stores");
@@ -141,11 +185,17 @@ namespace CartStack.Data.Migrations
 
             modelBuilder.Entity("CartStack.Models.Favorite", b =>
                 {
+                    b.HasOne("CartStack.Models.Category", "DefaultCategory")
+                        .WithMany()
+                        .HasForeignKey("DefaultCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CartStack.Models.Store", "DefaultStore")
                         .WithMany()
                         .HasForeignKey("DefaultStoreId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("DefaultCategory");
 
                     b.Navigation("DefaultStore");
                 });
@@ -163,17 +213,34 @@ namespace CartStack.Data.Migrations
                         .HasForeignKey("BoughtByUserId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("CartStack.Models.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("CartStack.Models.Store", "Store")
                         .WithMany()
                         .HasForeignKey("StoreId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("AddedByUser");
 
                     b.Navigation("BoughtByUser");
 
+                    b.Navigation("Category");
+
                     b.Navigation("Store");
+                });
+
+            modelBuilder.Entity("CartStack.Models.Store", b =>
+                {
+                    b.HasOne("CartStack.Models.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
                 });
 #pragma warning restore 612, 618
         }
