@@ -13,6 +13,14 @@ public static class SeedData
         {
             var members = (config["Family:Members"] ?? "")
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            if (members.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Family:Members is empty — no users can be seeded, login dropdown would be empty. " +
+                    "Set Family__Members (comma-separated names) as an env var or `fly secrets set`.");
+            }
+
             foreach (var name in members)
             {
                 db.Users.Add(new User { Name = name });

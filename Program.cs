@@ -6,6 +6,7 @@ using CartStack.Data;
 using CartStack.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
@@ -49,6 +50,18 @@ builder.Services.AddSingleton<ChangeBroadcaster>();
 builder.Services.AddSingleton<NameSuggestionCache>();
 builder.Services.AddScoped<IGroceryService, GroceryService>();
 
+// Persist Data Protection keys on the same volume as the DB so cookies +
+// LoginTicketProtector tickets survive machine restarts. Without this,
+// every restart logs the whole family out and invalidates in-flight logins.
+var dpKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dpKeysPath))
+{
+    Directory.CreateDirectory(dpKeysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dpKeysPath))
+        .SetApplicationName("CartStack");
+}
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -63,7 +76,14 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+
+// Fly terminates TLS at the edge and forwards plain HTTP to the container,
+// so UseHttpsRedirection() inside has nothing useful to redirect to and
+// logs a noisy warning. force_https=true in fly.toml handles it at the edge.
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();

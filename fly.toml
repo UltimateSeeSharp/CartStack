@@ -7,6 +7,7 @@ primary_region = "fra"
 [env]
   ASPNETCORE_ENVIRONMENT = "Production"
   ConnectionStrings__Db = "Data Source=/data/app.db"
+  DataProtection__KeysPath = "/data/dp-keys"
 
 [[mounts]]
   source = "data"

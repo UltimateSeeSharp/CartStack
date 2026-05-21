@@ -2,6 +2,14 @@
 
 These conventions apply only to this repo. See `ROADMAP.md` for the build plan.
 
+## Production runtime (Fly)
+
+- **Data Protection keys persist on the volume**, not in the container's ephemeral `~/.aspnet/DataProtection-Keys`. `Program.cs` reads `DataProtection:KeysPath` from config and only configures `PersistKeysToFileSystem` if it's set. `fly.toml` points it at `/data/dp-keys`. Without this, every machine restart logs the whole family out and invalidates any in-flight `LoginTicketProtector` ticket.
+- **`UseHttpsRedirection()` only in Development.** Fly terminates TLS at the edge and forwards plain HTTP; the middleware inside the container has nothing to redirect to and logs a `Failed to determine the https port for redirect` warning. `force_https = true` in `fly.toml` is what actually enforces HTTPS for users.
+- **`Family__Members` is hardfail.** `SeedData.EnsureSeededAsync` throws if there are no users in the DB *and* `Family:Members` is empty — better than booting "healthy" with an empty login dropdown.
+- **Single Fly machine** (`min_machines_running = 1`, `auto_stop_machines = "off"`). The in-memory `ChangeBroadcaster` only reaches users on the same machine — if we ever scale to ≥2 machines, broadcasting must move to Redis pub/sub or `fly-replay`. Flag here when that happens.
+- Fly's GitHub integration handles redeploy on push to `main` — no custom Actions workflow.
+
 ## Database migrations
 
 EF Core migrations apply **automatically at app startup** via `db.Database.MigrateAsync()` inside `SeedData.EnsureSeededAsync` (called from `Program.cs`). Seeding runs in the same startup path and is idempotent.
