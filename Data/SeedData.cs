@@ -49,6 +49,7 @@ public static class SeedData
             db.Stores.AddRange(
                 new Store { Name = "Spar", CategoryId = lebensmittel.Id, LogoSlug = "spar", SortOrder = 0 },
                 new Store { Name = "Hofer", CategoryId = lebensmittel.Id, LogoSlug = "hofer", SortOrder = 1 },
+                new Store { Name = "Sutterlüty", CategoryId = lebensmittel.Id, LogoSlug = "sutterluety", SortOrder = 2 },
                 new Store { Name = "BIPA", CategoryId = drogerie.Id, LogoSlug = "bipa", SortOrder = 0 },
                 new Store { Name = "DM", CategoryId = drogerie.Id, LogoSlug = "dm", SortOrder = 1 });
             await db.SaveChangesAsync(ct);
