@@ -1,11 +1,8 @@
-@inject NavigationManager Nav
-
 <MudButton Href="@Href"
            Variant="Variant.Text"
-           Class="@CssClass"
-           Style="flex:1; min-width:0; flex-direction:column; padding:6px 0; border-radius:0;">
-    <MudIcon Icon="@Icon" Size="Size.Medium" />
-    <MudText Typo="Typo.caption" Class="mt-1">@Label</MudText>
+           Class="@CssClass">
+    <MudIcon Icon="@Icon" Size="Size.Large" />
+    <MudText Typo="Typo.body2" Class="mt-1">@Label</MudText>
 </MudButton>
 
 @code {

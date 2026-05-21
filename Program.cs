@@ -5,7 +5,6 @@ using CartStack.Configuration;
 using CartStack.Data;
 using CartStack.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
