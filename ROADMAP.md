@@ -158,31 +158,30 @@ A small mobile-first grocery list for the Vinci family (David, Julian, Angelika,
 - `Dockerfile`: multi-stage `mcr.microsoft.com/dotnet/sdk:10.0` → `aspnet:10.0`, expose 8080, `ENTRYPOINT ["dotnet", "CartStack.dll"]`.
 - `.dockerignore`: excludes `bin/`, `obj/`, `.env*`, `*.db*`, `.git/`, `.github/`, etc. — small build context.
 - `fly.toml`: `app="cartstack"` (rename if taken), `primary_region="fra"`, port 8080, `force_https=true`, `auto_stop_machines="off"`, `min_machines_running=1`, volume `data` mounted at `/data`, `ConnectionStrings__Db=Data Source=/data/app.db` and `ASPNETCORE_ENVIRONMENT=Production` via `[env]`.
-- `.github/workflows/deploy.yml`: on push to `main`, `superfly/flyctl-actions/setup-flyctl` + `flyctl deploy --remote-only`. Concurrency-grouped so overlapping pushes serialize.
 
-**One-time manual setup (user runs, I don't):**
+**CI/CD: Fly's built-in GitHub integration**, not a custom Actions workflow. Set up once via the Fly dashboard (Apps → Launch → pick the GitHub repo). Every push to `main` then triggers a deploy automatically. No GitHub Actions YAML, no `FLY_API_TOKEN` secret to manage. (A previous commit had `.github/workflows/deploy.yml`; removed because it duplicated Fly's integration.)
 
-1. `iwr https://fly.io/install.ps1 -useb | iex` then `fly auth login`.
-2. `fly launch --no-deploy --copy-config=false --name cartstack --region fra` (pick another name if taken; update `fly.toml` to match).
-3. `fly volumes create data --size 1 --region fra --yes`.
-4. `fly secrets set Family__Code=haus-1200 Family__Members=David,Julian,Angelika,Andreas` (values come from local `.env`).
-5. `fly tokens create deploy --expiry 8760h` → copy the `FlyV1 fm2_...` output → GitHub repo → Settings → Secrets and variables → Actions → New secret → name `FLY_API_TOKEN`, value paste.
-6. Push to GitHub: `git push -u origin main`.
+**One-time manual setup (user runs in the Fly dashboard + a terminal):**
+
+1. Fly dashboard → Launch → select GitHub repo `UltimateSeeSharp/CartStack`. Set app name `cartstack`, region `fra`, port `8080`, memory `256MB`. **Leave Environment Variables empty** (the non-secrets are in `fly.toml`, the secrets go in via `fly secrets`).
+2. **Before clicking Deploy**, in a local terminal: `fly volumes create data --size 1 --region fra --app cartstack --yes`. If the app doesn't exist yet because Deploy hasn't been clicked, run `fly apps create cartstack --org personal` first.
+3. **Set secrets:** `fly secrets set Family__Code=haus-1200 Family__Members=David,Julian,Angelika,Andreas --app cartstack` (values from local `.env`).
+4. Click Deploy in the Fly dashboard. The first build runs on Fly's builders (~3-4 min).
+5. From now on, every `git push origin main` triggers a redeploy automatically.
 
 **Gate:**
-1. GitHub Actions → "Deploy to Fly.io" run is green after the first `git push origin main`.
-2. `https://cartstack.fly.dev/` loads the login page.
+1. Fly dashboard → first deploy is green; `https://cartstack.fly.dev/` loads the login page.
 3. Login works (family code from `fly secrets`; users seeded into the volume's `/data/app.db` on first start).
 4. Open Fly URL on a real phone → login works.
 5. "Zum Home-Bildschirm" → standalone app launches.
 6. Two phones, two users → add on one → appears on the other within ~1s.
 7. `fly machine restart` → data persists (volume mount).
 8. Tab idle 10 min → reconnects on return.
-9. Trivial commit on `main` → push → re-deploy runs and reaches prod in ~2 min.
+9. Trivial commit on `main` → push → Fly's GitHub integration redeploys and prod updates in ~2 min.
 
-Commit individually:
+Commits (already shipped):
 - `Phase 9: Dockerfile + fly.toml + .dockerignore`
-- `Phase 9: GitHub Actions deploy on push to main`
+- `Phase 9: use Fly's GitHub integration instead of our own workflow` (removes the Actions YAML)
 
 Tag `v1.0` after the first successful end-to-end deploy.
 
