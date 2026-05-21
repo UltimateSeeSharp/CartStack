@@ -7,8 +7,11 @@ using MudBlazor.Services;
 
 DotEnvLoader.Load(Path.Combine(Directory.GetCurrentDirectory(), ".env"));
 
+var culture = new CultureInfo("de-AT");
+CultureInfo.DefaultThreadCurrentCulture = culture;
+CultureInfo.DefaultThreadCurrentUICulture = culture;
+
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddEnvironmentVariables();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -25,10 +28,6 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await SeedData.EnsureSeededAsync(db, builder.Configuration);
 }
-
-var culture = new CultureInfo("de-AT");
-CultureInfo.DefaultThreadCurrentCulture = culture;
-CultureInfo.DefaultThreadCurrentUICulture = culture;
 
 if (!app.Environment.IsDevelopment())
 {
