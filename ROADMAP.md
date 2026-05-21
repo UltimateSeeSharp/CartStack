@@ -28,12 +28,13 @@ A small mobile-first grocery list for the Vinci family (David, Julian, Angelika,
 
 - NuGet: `Microsoft.EntityFrameworkCore.Sqlite`, `Microsoft.EntityFrameworkCore.Design`. Local tool `dotnet-ef`.
 - `Models/`: `User`, `Store`, `GroceryItem`, `Favorite`, `ItemStatus` enum.
-- `Data/AppDbContext.cs` + `Data/SeedData.cs` (idempotent).
-- `appsettings.json`: `Family:Code` = random `haus-XXXX`, `Family:Members` = David / Julian / Angelika / Andreas, `ConnectionStrings:Db` = `Data Source=app.db`.
+- `Data/AppDbContext.cs` + `Data/SeedData.cs` (idempotent). `SeedData.EnsureSeededAsync` calls `db.Database.MigrateAsync()` first — migrations apply automatically on startup; no manual `dotnet ef database update` needed (see `CLAUDE.md`).
+- `Data/DesignTimeDbContextFactory.cs` so `dotnet ef migrations add` works without booting the app.
+- Public config in `appsettings.json` (`ConnectionStrings:Db`). Family-specific values in a gitignored `.env` (`Family__Code`, `Family__Members`) — see `.env.example`. Loader: `Configuration/DotEnvLoader.cs`.
 - Seed stores: Spar, Hofer, Baumarkt.
-- `dotnet ef migrations add Init`, `dotnet ef database update`.
+- `dotnet ef migrations add Init` — the migration code is committed; applying it is automatic on next app start.
 
-**Gate:** 4 users + 3 stores in DB. Commit: `Phase 1: data layer`.
+**Gate (you run the app, I don't):** start the app, confirm `app.db` is created and contains 4 users + 3 stores (any SQLite viewer, or check `Users` / `Stores` table counts). Commit: `Phase 1: data layer`.
 
 ## Phase 2 — Auth (≈1.5h)
 

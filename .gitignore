@@ -16,3 +16,8 @@ obj/
 ## OS
 Thumbs.db
 .DS_Store
+
+## Env / secrets (open source — never commit real .env)
+.env
+.env.local
+.env.*.local
