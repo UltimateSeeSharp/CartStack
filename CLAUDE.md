@@ -1,73 +1,58 @@
 # CartStack — project conventions
 
-These conventions apply only to this repo. See `ROADMAP.md` for the build plan.
+> v1 shipped — family in production at https://cartstack.fly.dev/.
 
-## Production runtime (Fly)
-
-- **Data Protection keys persist on the volume**, not in the container's ephemeral `~/.aspnet/DataProtection-Keys`. `Program.cs` reads `DataProtection:KeysPath` from config and only configures `PersistKeysToFileSystem` if it's set. `fly.toml` points it at `/data/dp-keys`. Without this, every machine restart logs the whole family out and invalidates any in-flight `LoginTicketProtector` ticket.
-- **`UseHttpsRedirection()` only in Development.** Fly terminates TLS at the edge and forwards plain HTTP; the middleware inside the container has nothing to redirect to and logs a `Failed to determine the https port for redirect` warning. `force_https = true` in `fly.toml` is what actually enforces HTTPS for users.
-- **`Family__Members` is hardfail.** `SeedData.EnsureSeededAsync` throws if there are no users in the DB *and* `Family:Members` is empty — better than booting "healthy" with an empty login dropdown.
-- **Single Fly machine** (`min_machines_running = 1`, `auto_stop_machines = "off"`). The in-memory `ChangeBroadcaster` only reaches users on the same machine — if we ever scale to ≥2 machines, broadcasting must move to Redis pub/sub or `fly-replay`. Flag here when that happens.
-- Fly's GitHub integration handles redeploy on push to `main` — no custom Actions workflow.
-
-## Database migrations
-
-EF Core migrations apply **automatically at app startup** via `db.Database.MigrateAsync()` inside `SeedData.EnsureSeededAsync` (called from `Program.cs`). Seeding runs in the same startup path and is idempotent.
-
-- Authoring a schema change: `dotnet ef migrations add <Name>` by hand. This generates the migration code.
-- Applying it: nothing — it runs on next start.
-- Do not put `dotnet ef database update` in README setup steps, Dockerfile, or `fly.toml` release commands. The app applies its own schema.
-- Single-instance deploy (Fly with one machine), so the parallel-startup migration race isn't a concern. Flag this convention if/when we scale out.
+These conventions apply only to this repo. See `POST_V1.md` for backlog.
 
 ## UI: MudBlazor only
 
-The entire UI is built with MudBlazor. **No raw HTML controls anywhere** — no `<input>`, no `<button>`, no `<select>`, no `<form>`, no Bootstrap, no hand-rolled CSS for things MudBlazor covers. Every input, button, dialog, layout container, alert, snackbar, navigation, card, etc. uses the MudBlazor component for that purpose (`MudTextField`, `MudButton`, `MudSelect`, `MudForm`/`EditForm`-with-MudBlazor-children, `MudPaper`, `MudAlert`, `MudSnackbar`, `MudAppBar`, `MudFab`, etc.).
+The entire UI is built with MudBlazor. **No raw HTML controls anywhere** — no `<input>`, no `<button>`, no `<select>`, no `<form>`, no Bootstrap, no hand-rolled CSS for things MudBlazor covers. Every input, button, dialog, layout container, alert, snackbar, navigation, card uses the MudBlazor component for that purpose (`MudTextField`, `MudButton`, `MudSelect`, `MudPaper`, `MudAlert`, `MudSnackbar`, `MudAppBar`, `MudFab`, etc.).
 
-This is a hard rule. If something seems easier with raw HTML (form posting, file upload, etc.), find the MudBlazor equivalent or build a thin wrapper that keeps the MudBlazor look. Auth/login is no exception — login form is MudTextField + MudSelect + MudButton inside MudPaper, submitted via Blazor interactivity, never via a raw `<form action="...">`.
+If something seems easier with raw HTML (form posting, file upload), find the MudBlazor equivalent or build a thin wrapper that keeps the look. Login is a deliberate case in point — see Auth below.
 
-## Authorization in this app — DO NOT use a fallback policy
+## Authorization — DO NOT use a fallback policy
 
-The natural-sounding pattern `AddAuthorization(opt => opt.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())` is **wrong** for Blazor Web Apps. The fallback policy applies to every endpoint that doesn't already have an explicit policy — which includes the SignalR `_blazor` hub, static assets, framework JS files, and CSS-isolation `.razor.js` artifacts. Anonymous browsers get 302-redirected to `/login` for those URLs, then the browser tries to parse the returned HTML as JS or JSON and the page breaks with `Unexpected token '<'` (sometimes "not valid JS module", sometimes "not valid JSON" depending on which fetch failed). The page goes blank.
+The natural-sounding pattern `AddAuthorization(opt => opt.FallbackPolicy = ...RequireAuthenticatedUser())` is **wrong** for Blazor Web Apps. The fallback policy applies to every endpoint that doesn't already have an explicit policy — including the SignalR `_blazor` hub, framework JS, MudBlazor JS/CSS, and CSS-isolation `.razor.js` artifacts. Anonymous browsers get 302-redirected to `/login` for those URLs, then the browser tries to parse the returned HTML as JS or JSON and the page breaks with `Unexpected token '<'`. The page goes blank.
 
-`MapStaticAssets().AllowAnonymous()` only fixes the static-asset half. The `_blazor` SignalR hub registered by `AddInteractiveServerComponents` is not covered.
+`MapStaticAssets().AllowAnonymous()` only fixes the static-asset half. The `_blazor` hub registered by `AddInteractiveServerComponents` is not covered.
 
-**The correct pattern:** no fallback policy. Apply `[Authorize]` per-page (or globally via `@attribute [Authorize]` in `Components/_Imports.razor`), and `[AllowAnonymous]` on the login page. Framework/asset URLs are then unaffected by auth.
+**Correct pattern:** no fallback policy. `@attribute [Authorize]` in `Components/_Imports.razor`, `[AllowAnonymous]` on `Login.razor`. The cookie handler's `LoginPath` redirects unauthenticated users.
 
 ```csharp
-builder.Services.AddAuthorization();  // no FallbackPolicy
-
-// _Imports.razor:
-@attribute [Authorize]
-
-// Login.razor:
-@attribute [AllowAnonymous]
+builder.Services.AddAuthorization();   // no FallbackPolicy
 ```
-
-The cookie handler's `LoginPath` redirects unauthenticated users to `/login` when they hit a protected page — that's the right place for the redirect, not the global fallback.
 
 ## Auth
 
-Family-code login + cookie auth. Not ASP.NET Core Identity.
+Family-code shared login + cookie auth. No ASP.NET Core Identity.
 
-- One shared `Family:Code` from `.env` (never in `appsettings.json`). Login form posts `code` + `name` to `/auth/login` (minimal API). Endpoint validates the code, looks up the active `User` row by name, signs in via cookie auth.
-- Cookie name: `cartstack.auth`. `HttpOnly`, `SameSite=Lax`, `SecurePolicy=SameAsRequest` (so HTTP dev still works; Fly is always HTTPS in prod).
-- Persistent until logout: `IsPersistent=true`, `ExpiresUtc=now+10y`. Sliding expiration enabled. There is no idle timeout — family stays logged in indefinitely.
-- Fallback authorization policy is `RequireAuthenticatedUser()`. Unauth users hitting any page get redirected to `/login` via `<AuthorizeRouteView>` + `RedirectToLogin`. The `/login` Razor page is marked `[AllowAnonymous]`.
-- Auth endpoints (`/auth/login`, `/auth/logout`) use `.DisableAntiforgery()`. Justification: the shared family code is itself the secret, the cookie isn't a value an attacker can forge into a form, and these are unauthenticated POSTs by design. If the threat model ever changes, add antiforgery tokens via `<AntiforgeryToken />` in the form.
-- `CurrentUserAccessor` (scoped) reads the user id / name from `AuthenticationStateProvider`. Components should depend on this, not on `IHttpContextAccessor` (which is unreliable across SSR/interactive boundaries in Blazor Web App).
+- **Login flow** (`Components/Pages/Login.razor`): MudBlazor interactive form. Component validates `Family:Code` and the picked name in-process, mints a 30s data-protected ticket via `Auth/LoginTicketProtector.cs`, then `Nav.NavigateTo("/auth/sign-in?ticket=...", forceLoad: true)`. The static `MapGet("/auth/sign-in")` endpoint unprotects the ticket and calls `SignInAsync`. The ticket bridge exists because interactive Blazor handlers can't call `SignInAsync` — no `HttpContext` over the SignalR circuit.
+- **No raw `<form action="...">` anywhere.**
+- **Cookie**: `cartstack.auth`, `HttpOnly`, `SameSite=Lax`, `SecurePolicy=SameAsRequest`. Persistent until logout: `IsPersistent=true`, 10-year expiry, sliding.
+- **`CurrentUserAccessor`** (scoped, `Services/CurrentUserAccessor.cs`) reads claims via `AuthenticationStateProvider`, **not** `IHttpContextAccessor` — the latter is unreliable across SSR/interactive boundaries in Blazor Web App.
+- **Logout**: `GET /auth/sign-out` (MudButton with `Href=...`, no form).
 
-## Barcode data sources (for Phase 4.5)
+## Production runtime (Fly)
 
-- Free, usable: **Open Food Facts** (`world.openfoodfacts.org/api/v2/product/<ean>.json`). Good for branded goods, weak on Austrian private labels (Hofer "Zurück zum Ursprung", Spar "S-Budget"/"Clever", Baumarkt SKUs).
-- Authoritative but unusable here: GS1 Austria (`gs1.at`) is the registrar of EANs starting with `90`/`91` but bulk access is paid B2B. GEPIR portal returns brand owner only.
-- **Do not** scrape `spar.at` / `hofer.at` / `billa.at` — ToS violation, structures change, fragile.
-- Do not buy commercial barcode-lookup APIs (UPCitemdb, EAN-Search, Barcodelookup) expecting AT private-label coverage — they're US/UK-centric.
-- The real database is the family-local `BarcodeLookup` cache populated by first scans; OFF is a one-time bootstrap per EAN.
+- **Data Protection keys persist on the Fly volume**. `Program.cs` reads `DataProtection:KeysPath` from config and configures `PersistKeysToFileSystem` only if it's set. `fly.toml` points it at `/data/dp-keys`. Without this, every machine restart logs the whole family out and invalidates any in-flight `LoginTicketProtector` ticket.
+- **`UseHttpsRedirection()` only in Development**. Fly terminates TLS at the edge and forwards plain HTTP; the middleware inside the container has nothing to redirect to and logs a noisy warning. `force_https = true` in `fly.toml` handles HTTPS enforcement at the edge.
+- **`Family__Members` is hardfail**. `SeedData.EnsureSeededAsync` throws if no users exist *and* the config value is empty — better than booting with an empty login dropdown.
+- **Single Fly machine** (`min_machines_running = 1`, `auto_stop_machines = "off"`). The in-memory `ChangeBroadcaster` only reaches users on the same machine — if we ever scale to ≥2 machines, broadcasting must move to Redis pub/sub or `fly-replay`. Update this section when that happens.
+- **CI/CD via Fly's GitHub integration**, not a custom Actions workflow. Push to `main` → Fly's webhook deploys.
+
+## Database migrations
+
+EF Core migrations apply **automatically at startup** via `db.Database.MigrateAsync()` inside `Data/SeedData.cs` (called from `Program.cs`). Seeding runs in the same path and is idempotent.
+
+- Schema change: `dotnet ef migrations add <Name>` (authoring).
+- Apply: nothing — runs on next start.
+- Do not put `dotnet ef database update` in Dockerfile, `fly.toml` release commands, or README setup steps.
 
 ## Configuration
 
-- Public, non-sensitive defaults live in `appsettings.json` (logging, connection string template).
-- Secrets and personal/family-specific config (family code, member names) live in a gitignored `.env` at the repo root. Loaded by `Configuration/DotEnvLoader.cs` before `WebApplication.CreateBuilder`, then `AddEnvironmentVariables()` makes them available via `IConfiguration`.
-- `.env.example` is tracked with placeholder values so a fresh clone knows what to fill in.
+- Public, non-sensitive defaults in `appsettings.json` (logging, connection string template).
+- Secrets and family-specific config (family code, member names) in a gitignored `.env` at repo root. Loaded by `Configuration/DotEnvLoader.cs` before `WebApplication.CreateBuilder`; the host's default `AddEnvironmentVariables()` then makes them available via `IConfiguration`.
+- `.env.example` is tracked with placeholder values.
 - Env var naming: double-underscore (`Family__Code`) maps to the nested config key (`Family:Code`).
-- For list values (e.g. `Family__Members`), use comma-separated strings and split at the consumer — env vars don't bind cleanly to `string[]` the way JSON arrays do.
+- List values (e.g. `Family__Members`) use comma-separated strings and are split at the consumer — env vars don't bind cleanly to `string[]` the way JSON arrays do.
+- In production, `Family__Code` and `Family__Members` come from `fly secrets`, not from `.env` (the `.env` file stays out of the Docker image entirely via `.dockerignore`).
