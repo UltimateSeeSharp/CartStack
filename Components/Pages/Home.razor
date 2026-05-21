@@ -1,8 +1,129 @@
 @page "/"
+@implements IDisposable
+@inject IGroceryService Grocery
+@inject ChangeBroadcaster Broadcaster
+@inject IDialogService DialogService
 
-<PageTitle>CartStack</PageTitle>
+<PageTitle>CartStack — Liste</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
-    <MudText Typo="Typo.h3" Align="Align.Center" GutterBottom="true">CartStack</MudText>
-    <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Default">— folgt</MudText>
+<MudContainer MaxWidth="MaxWidth.Small" Class="pa-4">
+
+    @* Favorite chips placeholder — Phase 6 populates this *@
+    <MudPaper Class="pa-2 mb-4 d-flex" Elevation="0" Style="overflow-x:auto; gap:8px;">
+        <MudText Typo="Typo.caption" Color="Color.Default">Favoriten folgen…</MudText>
+    </MudPaper>
+
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_groups.Count == 0)
+    {
+        <MudPaper Class="pa-6 d-flex flex-column align-center" Elevation="0">
+            <MudIcon Icon="@Icons.Material.Outlined.ShoppingBasket" Size="Size.Large" Color="Color.Default" />
+            <MudText Typo="Typo.body1" Class="mt-2">Nichts auf der Liste.</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Default">Tipp auf + um etwas hinzuzufügen.</MudText>
+        </MudPaper>
+    }
+    else
+    {
+        foreach (var group in _groups)
+        {
+            <MudText Typo="Typo.overline" Class="mt-4 mb-1">@group.StoreName</MudText>
+            <MudPaper Elevation="0" Class="mb-2">
+                <MudList T="GroceryItem" Dense="false">
+                    @foreach (var item in group.Items)
+                    {
+                        <MudListItem T="GroceryItem" Value="@item">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                <MudCheckBox T="bool"
+                                             Value="false"
+                                             ValueChanged="@(_ => MarkBoughtAsync(item.Id))"
+                                             Size="Size.Large"
+                                             Color="Color.Primary" />
+                                <MudStack Spacing="0" Class="flex-grow-1">
+                                    <MudText Typo="Typo.body1">
+                                        @item.Name
+                                        @if (item.Qty > 1)
+                                        {
+                                            <MudText HtmlTag="span" Typo="Typo.body2" Color="Color.Default" Class="ml-1">× @item.Qty</MudText>
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Default">
+                                        von @(item.AddedByUser?.Name ?? "?")
+                                    </MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Delete"
+                                               Size="Size.Small"
+                                               Color="Color.Default"
+                                               OnClick="@(() => DeleteAsync(item.Id))" />
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+    }
 </MudContainer>
+
+<MudFab Color="Color.Primary"
+        StartIcon="@Icons.Material.Filled.Add"
+        Style="position:fixed; bottom:24px; right:24px; z-index:1000;"
+        OnClick="OpenAddDialog" />
+
+@code {
+    private bool _loading = true;
+    private List<StoreGroup> _groups = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Broadcaster.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var items = await Grocery.GetPendingItemsAsync();
+        _groups = items
+            .GroupBy(i => new { i.StoreId, StoreName = i.Store?.Name ?? "?" })
+            .OrderBy(g => g.First().Store?.SortOrder ?? int.MaxValue)
+            .Select(g => new StoreGroup(g.Key.StoreName, g.ToList()))
+            .ToList();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async void OnChanged(ChangeEvent e)
+    {
+        if (e.Kind is ChangeKind.ItemAdded
+            or ChangeKind.ItemBought
+            or ChangeKind.ItemUnbought
+            or ChangeKind.ItemDeleted
+            or ChangeKind.StoreChanged)
+        {
+            await InvokeAsync(LoadAsync);
+        }
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<Components.Dialogs.AddItemDialog>("Hinzufügen", new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            BackdropClick = true,
+            MaxWidth = MaxWidth.ExtraSmall,
+            FullWidth = true,
+        });
+        await dialog.Result;
+    }
+
+    private async Task MarkBoughtAsync(int id) => await Grocery.MarkBoughtAsync(id);
+    private async Task DeleteAsync(int id) => await Grocery.DeleteItemAsync(id);
+
+    public void Dispose()
+    {
+        Broadcaster.Changed -= OnChanged;
+    }
+
+    private record StoreGroup(string StoreName, List<GroceryItem> Items);
+}

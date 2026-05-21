@@ -1,0 +1,79 @@
+@inject IGroceryService Grocery
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField T="string"
+                          @bind-Value="_name"
+                          Label="Was?"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          AutoFocus="true" />
+
+            <MudNumericField T="int"
+                             @bind-Value="_qty"
+                             Label="Menge"
+                             Variant="Variant.Outlined"
+                             Min="1"
+                             Max="99" />
+
+            <MudSelect T="int"
+                       @bind-Value="_storeId"
+                       Label="Wo?"
+                       Variant="Variant.Outlined">
+                @foreach (var s in _stores)
+                {
+                    <MudSelectItem T="int" Value="@s.Id">@s.Name</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Abbrechen</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!CanSubmit || _submitting)"
+                   OnClick="SubmitAsync">
+            Hinzufügen
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance Dialog { get; set; } = null!;
+    [Parameter] public int? PrefillStoreId { get; set; }
+
+    private string _name = "";
+    private int _qty = 1;
+    private int _storeId;
+    private IReadOnlyList<Store> _stores = [];
+    private bool _submitting;
+
+    private bool CanSubmit => !string.IsNullOrWhiteSpace(_name) && _storeId > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stores = await Grocery.GetStoresAsync();
+        _storeId = PrefillStoreId ?? _stores.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (!CanSubmit || _submitting) return;
+        _submitting = true;
+        try
+        {
+            var item = await Grocery.AddItemAsync(_name, _qty, _storeId);
+            Snackbar.Add($"{item.Name} hinzugefügt", Severity.Success);
+            Dialog.Close(DialogResult.Ok(item.Id));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            _submitting = false;
+        }
+    }
+
+    private void Cancel() => Dialog.Cancel();
+}
