@@ -45,6 +45,10 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<CurrentUserAccessor>();
 builder.Services.AddSingleton<LoginTicketProtector>();
 
+builder.Services.AddSingleton<ChangeBroadcaster>();
+builder.Services.AddSingleton<NameSuggestionCache>();
+builder.Services.AddScoped<IGroceryService, GroceryService>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
