@@ -1,0 +1,125 @@
+@page "/login"
+@layout EmptyLayout
+@using Microsoft.EntityFrameworkCore
+@using CartStack.Auth
+@inject AppDbContext Db
+@inject IConfiguration Config
+@inject LoginTicketProtector TicketProtector
+@inject NavigationManager Nav
+@attribute [AllowAnonymous]
+
+<PageTitle>CartStack — Anmelden</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="mt-16">
+    <MudPaper Class="pa-6" Elevation="2">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">CartStack</MudText>
+        <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Default" Class="mb-6">
+            Familienanmeldung
+        </MudText>
+
+        @if (Error is { Length: > 0 })
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@ErrorText</MudAlert>
+        }
+
+        <MudStack Spacing="4">
+            <MudSelect T="string"
+                       @bind-Value="_name"
+                       Label="Name"
+                       Variant="Variant.Outlined">
+                @foreach (var n in _names)
+                {
+                    <MudSelectItem T="string" Value="@n">@n</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string"
+                          @bind-Value="_code"
+                          Label="Familiencode"
+                          InputType="InputType.Password"
+                          Variant="Variant.Outlined"
+                          Immediate="true"
+                          OnKeyDown="OnKeyDown" />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Size="Size.Large"
+                       FullWidth="true"
+                       Disabled="_submitting"
+                       OnClick="SubmitAsync">
+                @(_submitting ? "Anmelden…" : "Anmelden")
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+
+    private string _code = "";
+    private string? _name;
+    private string[] _names = [];
+    private bool _submitting;
+
+    private string ErrorText => Error switch
+    {
+        "code"    => "Falscher Familiencode.",
+        "user"    => "Name nicht gefunden.",
+        "expired" => "Anmeldung abgelaufen. Bitte erneut versuchen.",
+        _         => "Anmeldung fehlgeschlagen.",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _names = await Db.Users
+            .Where(u => u.IsActive)
+            .OrderBy(u => u.Name)
+            .Select(u => u.Name)
+            .ToArrayAsync();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SubmitAsync();
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_submitting) return;
+        _submitting = true;
+
+        try
+        {
+            var expected = Config["Family:Code"];
+            if (string.IsNullOrWhiteSpace(expected)
+                || !string.Equals(_code.Trim(), expected, StringComparison.Ordinal))
+            {
+                Nav.NavigateTo("/login?error=code", forceLoad: false, replace: true);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_name))
+            {
+                Nav.NavigateTo("/login?error=user", forceLoad: false, replace: true);
+                return;
+            }
+
+            var user = await Db.Users
+                .Where(u => u.IsActive && u.Name == _name)
+                .FirstOrDefaultAsync();
+
+            if (user is null)
+            {
+                Nav.NavigateTo("/login?error=user", forceLoad: false, replace: true);
+                return;
+            }
+
+            var ticket = TicketProtector.Create(user.Id, user.Name);
+            Nav.NavigateTo($"/auth/sign-in?ticket={Uri.EscapeDataString(ticket)}", forceLoad: true);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

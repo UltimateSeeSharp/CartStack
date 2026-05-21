@@ -1,7 +1,11 @@
 using System.Globalization;
+using CartStack.Auth;
 using CartStack.Components;
 using CartStack.Configuration;
 using CartStack.Data;
+using CartStack.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 
@@ -21,6 +25,26 @@ builder.Services.AddMudServices();
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("Db")));
 
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(opt =>
+    {
+        opt.Cookie.Name = "cartstack.auth";
+        opt.Cookie.HttpOnly = true;
+        opt.Cookie.SameSite = SameSiteMode.Lax;
+        opt.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        opt.LoginPath = "/login";
+        opt.LogoutPath = "/auth/logout";
+        opt.ExpireTimeSpan = TimeSpan.FromDays(365 * 10);
+        opt.SlidingExpiration = true;
+    });
+
+builder.Services.AddAuthorization();
+
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddScoped<CurrentUserAccessor>();
+builder.Services.AddSingleton<LoginTicketProtector>();
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -37,9 +61,12 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapAuthEndpoints();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

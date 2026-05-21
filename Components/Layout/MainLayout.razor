@@ -6,6 +6,22 @@
 <MudSnackbarProvider />
 
 <MudLayout>
+    <MudAppBar Elevation="1" Dense="true">
+        CartStack
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="mr-3">@context.User.Identity?.Name</MudText>
+                <MudButton Href="/auth/sign-out"
+                           Variant="Variant.Text"
+                           Color="Color.Inherit"
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Logout">
+                    Abmelden
+                </MudButton>
+            </Authorized>
+        </AuthorizeView>
+    </MudAppBar>
     <MudMainContent>
         @Body
     </MudMainContent>

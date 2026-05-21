@@ -40,12 +40,14 @@ A small mobile-first grocery list for the Vinci family (David, Julian, Angelika,
 
 **Goal:** family-code login with cookie ticket. No ASP.NET Core Identity.
 
-- Cookie auth, 30-day sliding expiration, `RequireAuthenticatedUser` fallback.
-- `Components/Pages/Login.razor` at `/login`: Familiencode input + name dropdown + "Angemeldet bleiben". Validates code, issues cookie ticket, redirects to `/`.
-- `Services/CurrentUserAccessor.cs` (scoped): exposes `UserId`, `UserName`.
-- `/logout` endpoint.
+- Cookie auth in `Program.cs`: `AddAuthentication().AddCookie()`. Persistent until logout (`IsPersistent=true`, `ExpiresUtc=now+10y`, sliding). `RequireAuthenticatedUser` fallback policy.
+- `Auth/AuthEndpoints.cs`: `POST /auth/login` (validates `Family:Code` from `.env`, looks up active `User` by name, `SignInAsync`) and `POST /auth/logout`. Both `.DisableAntiforgery()` — see `CLAUDE.md` Auth section for the rationale.
+- `Components/Pages/Login.razor` at `/login` (`[AllowAnonymous]`, uses `EmptyLayout`): MudPaper card with `Familiencode` (password) + `Name` dropdown loaded from DB + Anmelden button. German error messages via `?error=code|user` query param.
+- `Components/RedirectToLogin.razor` + `<AuthorizeRouteView>` in `Routes.razor` → unauth users get bounced to `/login`.
+- `Services/CurrentUserAccessor.cs` (scoped): reads claims via `AuthenticationStateProvider`.
+- `MainLayout` gets a `MudAppBar` with the current user's name and an Abmelden form-button posting to `/auth/logout`.
 
-**Gate:** anon → redirect to `/login`; wrong code → error; right code + name → `/` with name visible; logout works. Commit: `Phase 2: auth`.
+**Gate:** anon hits `/` → redirect to `/login`. Wrong code → red Alert "Falscher Familiencode." Right code + correct name → land on `/` with name visible in the app bar. Click Abmelden → back to `/login`. Commit: `Phase 2: auth`.
 
 ## Phase 3 — Service layer + live updates (≈2h)
 
